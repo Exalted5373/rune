@@ -58,8 +58,9 @@ impl El {
     ///
     /// [`Tx::drop_point`] says where on the element the files landed, to insert them there.
     ///
-    /// macOS, Windows and X11. Wayland reports no file drags in winit 0.30, and the web build
-    /// has no paths to give. Headless scripts drop files with `drop_files` events.
+    /// macOS, Windows, X11 and Wayland (drags offering `text/uri-list`, the file managers'
+    /// type). The web build has no paths to give. Headless scripts drop files with
+    /// `drop_files` events.
     pub fn on_drop_files<S: 'static>(mut self, f: impl Fn(&mut S, &[std::path::PathBuf], &mut Tx) + 'static) -> Self {
         self.handlers.drop.get_or_insert_default().on_drop = Some(Rc::new(move |s, files, tx| f(downcast::<S>(s), files, tx)));
         self

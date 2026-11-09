@@ -53,6 +53,8 @@ impl<S: 'static> Host<S> {
         let appkit = self.win.as_ref().map(|l| crate::platform::macos::drop::take(&l.window)).unwrap_or_default();
         #[cfg(target_os = "windows")]
         let ole = self.win.as_ref().map(|l| crate::platform::win32::drop_target::take(&l.window)).unwrap_or_default();
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        let wayland = self.win.as_ref().and_then(|l| l.native.drop.as_ref()).map(|d| d.take()).unwrap_or_default();
         let Some(l) = self.win.as_ref().filter(|_| self.life.shown()) else {
             self.files = FileDrop::default();
             return;
@@ -75,6 +77,20 @@ impl<S: 'static> Host<S> {
         for step in ole {
             use crate::platform::win32::drop_target::Step;
             // Window points, as the pointer's samples are, in the zoomed app's points.
+            let z = self.rt.zoom();
+            let at = |(x, y): (f32, f32)| Some((x / z, y / z));
+            queued |= match step {
+                Step::Enter(paths, p) => { self.rt.drag_files(paths, at(p)); true }
+                Step::Move(p) => self.rt.drag_files_to(at(p)),
+                Step::Drop(paths, p) => { self.rt.drop_files(paths, at(p)); true }
+                Step::Leave => { self.rt.drag_files_leave(); true }
+            };
+        }
+        // Wayland's drags say where they are at every step too (`wayland_drop`), in surface
+        // points, which are window points.
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        for step in wayland {
+            use crate::platform::wayland_drop::Step;
             let z = self.rt.zoom();
             let at = |(x, y): (f32, f32)| Some((x / z, y / z));
             queued |= match step {
@@ -167,7 +183,8 @@ impl<S: 'static> Host<S> {
             WakeEvent::GpuReady(_) => self.gpu_ready(),
             #[cfg(not(target_os = "windows"))]
             WakeEvent::GpuReady(_) => {}
-            WakeEvent::Reopen | WakeEvent::Turn | WakeEvent::Quit(_) => {}
+            // The turn's `about_to_wait` hands the drag's steps over (`flush_files`).
+            WakeEvent::Reopen | WakeEvent::Turn | WakeEvent::Quit(_) | WakeEvent::Files(_) => {}
         }
     }
 

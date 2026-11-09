@@ -1719,8 +1719,10 @@ while it's over the window (drawing a frame only when that changes the target), 
 drops. On macOS that's
 `NSWindow.mouseLocationOutsideOfEventStream`, on Windows `GetCursorPos` and on X11
 `QueryPointer`. Where no sample is possible it uses the last pointer position, else the root.
-macOS, Windows and X11. Wayland reports no file drags in winit 0.30, and the web build has no
-paths to give.
+winit 0.30 reports no file drags on Wayland, so there the window binds its own
+`wl_data_device` on winit's display connection and takes drags offering `text/uri-list`,
+asking the source for a copy; Wayland says where the drag is at every step, so nothing
+samples. macOS, Windows, X11 and Wayland; the web build has no paths to give.
 
 Headless scripts drag and drop files at a point or an element's centre:
 `{"drag_files": {"paths": ["a.png"], "key": "zone"}}` moves a drag there, and
