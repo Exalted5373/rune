@@ -1550,6 +1550,10 @@ Or ask from a handler, with no executor or waker to wire up:
   the same for a Save dialog, and `tx.open_folder` for an Open dialog that picks a folder
   (`FileDialogKind::Folder`, `"kind": "folder"` in `--tree`; filters and file name don't apply;
   the portal's `directory` chooser on Linux).
+- `tx.open_files` is an Open dialog that picks any number of files, as an import of several
+  photos does: its callback gets every file chosen (`FilesDialogResult`, an empty list when
+  cancelled). rfd's `pick_files` on macOS and Windows, the portal's `multiple` choice on Linux;
+  `--tree` adds `"multiple": true`.
 - One dialog at a time: asked for while one is open, the callback gets an error at once and
   the open dialog stays. Asked for in the same turn that shows a hidden window, it shows with
   the window; asked for on a window that stays hidden, or on an overlay, the callback gets an
@@ -1558,7 +1562,9 @@ Or ask from a handler, with no executor or waker to wire up:
 - Headless runs (`--tree`, scripts, tests) keep it open as `fileDialog` in `--tree` (kind,
   title, filters, directory, fileName) until `{"type": "file-dialog", "path": "/exports/a.json"}`
   or `{"type": "file-dialog-cancel"}` answers it. Tests read it with `Runtime::file_dialog()`
-  and answer with `Runtime::resolve_file_dialog(Some(path))` or `(None)`.
+  (and `Runtime::file_dialog_multiple()`) and answer with
+  `Runtime::resolve_file_dialog(Some(path))` or `(None)`, or several files with
+  `Runtime::resolve_file_dialog_paths(paths)`.
 
 ### Dragging out to other apps (`drag_out`)
 

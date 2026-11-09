@@ -48,8 +48,8 @@ pub(super) enum Action {
     Paste(crate::ClipboardContent, Option<Option<String>>),
     /// A `Tx::read_clipboard` callback's id and what the clipboard held.
     ClipboardRead(u64, crate::ClipboardContent),
-    /// A `Tx::open_file` or `Tx::save_file` callback's id and the dialog's answer.
-    FileDialog(u64, crate::file_dialog::FileDialogResult),
+    /// A file dialog callback's id and the dialog's answer: the chosen paths, none on cancel.
+    FileDialog(u64, crate::file_dialog::FilesDialogResult),
     Focus(String, f32, f32),
     Blur,
     /// What assistive technology asked of an element (`a11y/actions.rs`).

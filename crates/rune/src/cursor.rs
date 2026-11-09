@@ -23,6 +23,11 @@ pub enum Cursor {
     Move,
     ResizeColumn,
     ResizeRow,
+    /// Resizing from a top-left or bottom-right corner (CSS `nwse-resize`), as a crop frame's
+    /// handles. macOS has no public cursor for it and shows the arrow.
+    ResizeNwse,
+    /// Resizing from a top-right or bottom-left corner (CSS `nesw-resize`); the arrow on macOS.
+    ResizeNesw,
     /// A precise-selection cross (CSS `crosshair`), for picking a point or dragging out a rect.
     Crosshair,
     /// No OS cursor (CSS `none`), for views that draw their own. It shows again as soon as the
