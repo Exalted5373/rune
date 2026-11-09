@@ -107,6 +107,8 @@ unicode-segmentation = "1.13"
 icu_properties = { version = "2.3", default-features = false, features = ["compiled_data"] }
 # Words for a double-click, natively with the dictionaries Parley's `complex-scripts` links.
 icu_segmenter = { version = "2.3", default-features = false, features = ["compiled_data"] }
+# The sweep that tessellates `Area`: holes, crossing contours, even-odd and non-zero fill.
+lyon_tessellation = "1.0.22"
 resvg = { version = "0.45", default-features = false, optional = true }
 
 [target.'cfg(all(unix, not(target_os = "linux")))'.dependencies]

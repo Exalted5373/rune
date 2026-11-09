@@ -119,3 +119,13 @@ fn an_image_source_set_gets_sizes_from_every_width() {
     // `aspect-ratio` or height decides, so the reset sits under every class (`:where`).
     assert!(css.contains(":where([data-rune-static]) img{height:auto}"), "{css}");
 }
+
+#[test]
+fn an_area_exports_as_one_path_with_its_fill_rule() {
+    let ring = crate::Path::new()
+        .polygon([[0.0, 0.0], [30.0, 0.0], [30.0, 30.0], [0.0, 30.0]])
+        .polygon([[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]);
+    let area = crate::Area::new(&ring, crate::FillRule::EvenOdd);
+    let svg = css::svg(&crate::Shape::new().fill_area(&area, crate::Color::WHITE), (30.0, 30.0));
+    assert!(svg.contains(" fill-rule=\"evenodd\" d=\"M0,0L30,0L30,30L0,30ZM10,10L20,10L20,20L10,20Z\"/>"), "{svg}");
+}

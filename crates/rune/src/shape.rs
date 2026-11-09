@@ -1,13 +1,19 @@
-//! Vector shapes painted inside an element: strokes (polylines) and fills (simple polygons), in
-//! the element's own points with the origin at its top-left corner. For waveforms, meters,
-//! sparklines and other drawing that changes every frame.
+//! Vector shapes painted inside an element: strokes (polylines), fills (simple polygons) and
+//! areas (several contours under a [`FillRule`], with holes), in the element's own points with
+//! the origin at its top-left corner. For waveforms, meters, sparklines, maps and other drawing.
 //!
 //! Shapes render in the uber-quad pass without the glyph atlas: a stroke is one capsule or box
 //! per segment (`KIND_SEGMENT`), a fill is ear-clipped into triangles (`KIND_TRIANGLE`) whose
 //! polygon-boundary edges are antialiased and whose interior edges are hard, so fills have no
-//! seams. Translucent strokes blend twice where neighbouring segments overlap at a joint; draw
-//! translucent areas as fills. An element's opacity doesn't: while it is between 0 and 1, a
-//! shape of more than one piece paints through a layer that takes it once.
+//! seams. An [`Area`] is tessellated once when it is made, by a sweep that handles holes,
+//! crossings and fill rules, into the same triangles. Translucent strokes blend twice where
+//! neighbouring segments overlap at a joint; draw translucent areas as fills. An element's
+//! opacity doesn't: while it is between 0 and 1, a shape of more than one piece paints through a
+//! layer that takes it once.
+
+mod area;
+
+pub use area::{Area, FillRule};
 
 use crate::color::Color;
 
@@ -33,9 +39,14 @@ pub(crate) enum Op {
         points: Vec<[f32; 2]>,
         color: Color,
     },
+    Area {
+        area: Area,
+        color: Color,
+    },
 }
 
-/// A list of strokes and fills, painted in order over the element's fill and under its text.
+/// A list of strokes, fills and areas, painted in order over the element's fill and under its
+/// text.
 ///
 /// ```
 /// use rune::{Color, Shape, canvas};
@@ -107,10 +118,26 @@ impl Shape {
         self
     }
 
-    /// Fills every subpath of `path` on its own (no holes between subpaths).
+    /// Fills every subpath of `path` on its own (no holes between subpaths);
+    /// [`Self::fill_path_with`] fills them together, with holes.
     pub fn fill_path(mut self, path: &Path, color: Color) -> Shape {
         for sub in &path.subpaths {
             self = self.fill(sub.points.clone(), color);
+        }
+        self
+    }
+
+    /// The inside of `path` under `rule`, all its subpaths together: an outline with holes cut
+    /// out of it, or a group of islands. Tessellates `path` now; for drawing that rebuilds with
+    /// the same geometry (a map that pans and zooms), keep an [`Area`] and use [`Self::fill_area`].
+    pub fn fill_path_with(self, path: &Path, rule: FillRule, color: Color) -> Shape {
+        self.fill_area(&Area::new(path, rule), color)
+    }
+
+    /// Fills `area` with the triangles it was tessellated into when it was made.
+    pub fn fill_area(mut self, area: &Area, color: Color) -> Shape {
+        if !area.is_empty() {
+            self.ops.push(Op::Area { area: area.clone(), color });
         }
         self
     }
@@ -128,20 +155,20 @@ impl Shape {
     }
 
     /// Whether it draws more than one piece, so two can overlap: a stroke of two or more
-    /// segments (they meet at a joint), or more than one stroke or fill. Faded, overlapping
+    /// segments (they meet at a joint), or more than one stroke, fill or area. Faded, overlapping
     /// pieces blend twice where they meet, so a fade paints such a shape through a layer.
     pub(crate) fn overlaps(&self) -> bool {
         let pieces = |op: &Op| match op {
             Op::Stroke { points, closed, .. } => if *closed { points.len() } else { points.len() - 1 },
-            Op::Fill { .. } => 1,
+            Op::Fill { .. } | Op::Area { .. } => 1,
         };
         self.ops.iter().map(pieces).sum::<usize>() > 1
     }
 
     /// This shape drawn on to `t` (0 to 1), as SVG's `pathLength` trim draws a line: its strokes
     /// trace in order along their combined length, the one in progress cut where the drawing has
-    /// got to, and each fill fades in over the last [`DRAW_RAMP`] points of line before it (an
-    /// arrowhead lands as its line arrives). With no strokes, the fills fade in together.
+    /// got to, and each fill or area fades in over the last [`DRAW_RAMP`] points of line before
+    /// it (an arrowhead lands as its line arrives). With no strokes, the fills fade in together.
     /// [`Transition::draw`](crate::Transition::draw) animates it.
     pub fn drawn(&self, t: f32) -> Shape {
         self.trimmed(0.0, if t.is_nan() { 1.0 } else { t })
@@ -185,7 +212,7 @@ impl Shape {
                     }
                     done += l;
                 }
-                Op::Fill { points, color } => {
+                Op::Fill { .. } | Op::Area { .. } => {
                     let a = if total <= 0.0 {
                         t
                     } else if done <= 0.0 {
@@ -195,7 +222,11 @@ impl Shape {
                         ((at - (done - ramp)) / ramp).clamp(0.0, 1.0)
                     };
                     if a > 0.0 {
-                        ops.push(Op::Fill { points: points.clone(), color: Color { a: color.a * a, ..*color } });
+                        let mut faded = op.clone();
+                        if let Op::Fill { color, .. } | Op::Area { color, .. } = &mut faded {
+                            color.a *= a;
+                        }
+                        ops.push(faded);
                     }
                 }
             }
@@ -321,6 +352,20 @@ impl Path {
         if let Some(s) = self.subpaths.last_mut() {
             s.closed = true;
         }
+        self
+    }
+
+    /// Adds a closed subpath through `points`: a polygon's outline, or under a [`FillRule`] a
+    /// hole in one. A subpath left with only a `move_to` is replaced, as by another `move_to`.
+    pub fn polygon(mut self, points: impl IntoIterator<Item = [f32; 2]>) -> Path {
+        let points: Vec<[f32; 2]> = points.into_iter().collect();
+        if points.is_empty() {
+            return self;
+        }
+        if self.subpaths.last().is_some_and(|s| s.points.len() == 1 && !s.closed) {
+            self.subpaths.pop();
+        }
+        self.subpaths.push(Subpath { points, closed: true });
         self
     }
 }
