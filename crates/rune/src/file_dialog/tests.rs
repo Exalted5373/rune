@@ -97,11 +97,63 @@ fn a_second_dialog_while_one_is_open_is_refused_and_the_first_stays() {
 }
 
 #[test]
+fn an_open_files_dialog_picks_several_and_a_cancel_picks_none() {
+    #[derive(Default)]
+    struct Many { answers: Vec<Result<Vec<PathBuf>, String>> }
+    fn view(_: &Many, _: &mut Cx<Many>) -> El {
+        el().key("import").size(80.0, 20.0).on_press_tx(|_: &mut Many, tx: &mut Tx| {
+            let options = FileDialogOptions { title: "Import photos".into(), ..Default::default() }.filter("Photos", &["jpg", "dng"]);
+            tx.open_files(options, |s: &mut Many, result, _| s.answers.push(result.map_err(|e| e.0)));
+        })
+    }
+    let mut rt = Runtime::new(Many::default(), view, (200.0, 100.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let press = |rt: &mut Runtime<Many>| {
+        rt.pointer_down(10.0, 10.0);
+        rt.pointer_up(10.0, 10.0);
+        rt.frame(1.0 / 60.0);
+    };
+    press(&mut rt);
+    assert_eq!(rt.file_dialog().map(|(kind, _)| kind), Some(FileDialogKind::Open));
+    assert!(rt.file_dialog_multiple());
+    assert_eq!(rt.file_dialog_json().unwrap()["multiple"], true);
+    rt.resolve_file_dialog_paths(vec!["/photos/a.jpg".into(), "/photos/b.dng".into()]).unwrap();
+    assert!(!rt.file_dialog_multiple(), "closed");
+    rt.frame(2.0 / 60.0);
+    assert_eq!(rt.state.answers, [Ok(vec![PathBuf::from("/photos/a.jpg"), PathBuf::from("/photos/b.dng")])]);
+
+    press(&mut rt);
+    rt.resolve_file_dialog(Some("/photos/c.jpg".into())).unwrap();
+    rt.frame(4.0 / 60.0);
+    assert_eq!(rt.state.answers[1], Ok(vec![PathBuf::from("/photos/c.jpg")]), "a script's one file");
+
+    press(&mut rt);
+    let (id, _, _, multiple) = rt.take_file_dialog().expect("the host takes it");
+    assert!(multiple, "the host shows it as a dialog for several files");
+    rt.answer_file_dialog(id, Ok(Vec::new()));
+    rt.frame(6.0 / 60.0);
+    assert_eq!(rt.state.answers[2], Ok(Vec::new()), "cancelling picks none");
+}
+
+#[test]
+fn a_dialog_for_one_file_answered_with_several_gets_the_first() {
+    let mut rt = Runtime::new(Import::default(), import, (200.0, 100.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    press(&mut rt);
+    assert!(!rt.file_dialog_multiple());
+    assert!(rt.file_dialog_json().unwrap().get("multiple").is_none());
+    rt.resolve_file_dialog_paths(vec!["/a.json".into(), "/b.json".into()]).unwrap();
+    rt.frame(2.0 / 60.0);
+    assert_eq!(rt.state.answers, [Ok(Some("/a.json".into()))]);
+}
+
+#[test]
 fn a_host_shows_the_dialog_once_and_answers_it_by_id() {
     let mut rt = Runtime::new(Import::default(), import, (200.0, 100.0), Env::new(true, 1.0));
     rt.frame(0.0);
     press(&mut rt);
-    let (id, kind, _) = rt.take_file_dialog().expect("the host takes it");
+    let (id, kind, _, multiple) = rt.take_file_dialog().expect("the host takes it");
+    assert!(!multiple);
     assert_eq!(kind, FileDialogKind::Open);
     assert!(rt.take_file_dialog().is_none(), "showing, so not taken again");
     rt.answer_file_dialog(id, Err(FileDialogError("no portal".into())));

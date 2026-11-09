@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use super::*;
 #[cfg(test)]
-use crate::file_dialog::FileDialogResult;
+use crate::file_dialog::FilesDialogResult;
 use crate::file_dialog::{FileDialogError, FileDialogKind, FileDialogOptions};
 #[cfg(any(test, target_arch = "wasm32"))]
 use crate::popup_menu::Show;
@@ -300,17 +300,23 @@ impl<S: 'static> Runtime<S> {
     #[inline(always)]
     pub fn file_dialog(&self) -> Option<(FileDialogKind, &FileDialogOptions)> { self.core().file_dialog() }
     #[inline(always)]
+    pub fn file_dialog_multiple(&self) -> bool { self.core().file_dialog_multiple() }
+    #[inline(always)]
     pub fn resolve_file_dialog(&mut self, path: Option<PathBuf>) -> Result<(), FileDialogError> {
         self.core_mut().resolve_file_dialog(path)
     }
+    #[inline(always)]
+    pub fn resolve_file_dialog_paths(&mut self, paths: Vec<PathBuf>) -> Result<(), FileDialogError> {
+        self.core_mut().resolve_file_dialog_paths(paths)
+    }
     #[cfg(test)]
     #[inline(always)]
-    pub(crate) fn take_file_dialog(&mut self) -> Option<(u64, FileDialogKind, FileDialogOptions)> {
+    pub(crate) fn take_file_dialog(&mut self) -> Option<(u64, FileDialogKind, FileDialogOptions, bool)> {
         self.core_mut().take_file_dialog()
     }
     #[cfg(test)]
     #[inline(always)]
-    pub(crate) fn answer_file_dialog(&mut self, id: u64, result: FileDialogResult) {
+    pub(crate) fn answer_file_dialog(&mut self, id: u64, result: FilesDialogResult) {
         self.core_mut().answer_file_dialog(id, result);
     }
     #[inline(always)]
