@@ -1,11 +1,16 @@
 use super::*;
-use crate::file_dialog::{DialogState, FileDialogError, FileDialogKind, FileDialogOptions, FileDialogResult, Pending, Request};
+use crate::file_dialog::{DialogState, FileDialogError, FileDialogKind, FileDialogOptions, FilesDialogResult, Pending, Request};
 
 impl<S: 'static> Runtime<S> {
-    /// The file dialog showing, or about to show, from [`Tx::open_file`], [`Tx::save_file`] or
-    /// [`Tx::open_folder`].
+    /// The file dialog showing, or about to show, from [`Tx::open_file`], [`Tx::save_file`],
+    /// [`Tx::open_folder`] or [`Tx::open_files`].
     pub fn file_dialog(&self) -> Option<(FileDialogKind, &FileDialogOptions)> {
         self.file_dialog.pending().map(|d| (d.kind, &d.options))
+    }
+
+    /// Whether the file dialog showing picks any number of files ([`Tx::open_files`]).
+    pub fn file_dialog_multiple(&self) -> bool {
+        self.file_dialog.pending().is_some_and(|d| d.multiple)
     }
 
     /// Answers the file dialog showing as if the user chose `path`, or cancelled with `None`.
@@ -13,7 +18,15 @@ impl<S: 'static> Runtime<S> {
     /// answer themselves.
     pub fn resolve_file_dialog(&mut self, path: Option<std::path::PathBuf>) -> Result<(), FileDialogError> {
         let id = self.file_dialog.pending().ok_or_else(|| FileDialogError("no file dialog is open".into()))?.id;
-        self.answer_file_dialog(id, Ok(path));
+        self.answer_file_dialog(id, Ok(path.into_iter().collect()));
+        Ok(())
+    }
+
+    /// Answers the file dialog showing as if the user chose every file of `paths` (none
+    /// cancels), as an [`Tx::open_files`] dialog answers. A dialog for one file gets the first.
+    pub fn resolve_file_dialog_paths(&mut self, paths: Vec<std::path::PathBuf>) -> Result<(), FileDialogError> {
+        let id = self.file_dialog.pending().ok_or_else(|| FileDialogError("no file dialog is open".into()))?.id;
+        self.answer_file_dialog(id, Ok(paths));
         Ok(())
     }
 
@@ -34,17 +47,17 @@ impl<S: 'static> Runtime<S> {
             return;
         }
         self.trace_event(format_args!("file-dialog:open:{:?}", request.kind));
-        self.file_dialog = DialogState::Requested(Pending { id, kind: request.kind, options: request.options });
+        self.file_dialog = DialogState::Requested(Pending { id, kind: request.kind, options: request.options, multiple: request.multiple });
     }
 
     /// The dialog for the host to show, marked shown. Nothing while it shows.
-    pub(crate) fn take_file_dialog(&mut self) -> Option<(u64, FileDialogKind, FileDialogOptions)> {
+    pub(crate) fn take_file_dialog(&mut self) -> Option<(u64, FileDialogKind, FileDialogOptions, bool)> {
         let d = self.file_dialog.show()?;
-        Some((d.id, d.kind, d.options.clone()))
+        Some((d.id, d.kind, d.options.clone(), d.multiple))
     }
 
     /// Queues dialog `id`'s answer for the next frame, closing it.
-    pub(crate) fn answer_file_dialog(&mut self, id: u64, result: FileDialogResult) {
+    pub(crate) fn answer_file_dialog(&mut self, id: u64, result: FilesDialogResult) {
         self.file_dialog.answered(id);
         self.queue.push(Action::FileDialog(id, result));
     }
@@ -56,24 +69,24 @@ impl<S: 'static> Runtime<S> {
         }
     }
 
-    pub(super) fn run_file_dialog(&mut self, id: u64, result: FileDialogResult, one: &mut Tx) -> bool {
+    pub(super) fn run_file_dialog(&mut self, id: u64, result: FilesDialogResult, one: &mut Tx) -> bool {
         let Some(i) = self.file_dialog_answers.iter().position(|(dialog, _)| *dialog == id) else { return false };
         let (_, f) = self.file_dialog_answers.remove(i);
         self.trace_event(format_args!(
             "file-dialog:answer:{}",
-            if result.as_ref().is_ok_and(Option::is_some) { "path" } else if result.is_ok() { "cancel" } else { "error" }
+            if result.as_ref().is_ok_and(|paths| !paths.is_empty()) { "path" } else if result.is_ok() { "cancel" } else { "error" }
         ));
         f(states!(self), result, one);
         true
     }
 
-    /// Answers the open or waiting dialog with `Ok(None)`, and runs any queued file dialog
+    /// Answers the open or waiting dialog with no file (`Ok(None)` to its callback), and runs any queued file dialog
     /// callbacks now while the window's state is still alive. A callback that asks for another
     /// dialog is answered too, up to a bound against one that always asks again.
     pub(crate) fn cancel_file_dialogs(&mut self) {
         for _ in 0..64 {
             if let Some(d) = self.file_dialog.take() {
-                self.queue.push(Action::FileDialog(d.id, Ok(None)));
+                self.queue.push(Action::FileDialog(d.id, Ok(Vec::new())));
             }
             let Some(pos) = self.queue.iter().position(|a| matches!(a, Action::FileDialog(..))) else { return };
             let Action::FileDialog(id, result) = self.queue.remove(pos) else { unreachable!() };

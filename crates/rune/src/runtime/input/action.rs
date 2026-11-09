@@ -54,8 +54,8 @@ pub(super) enum Action {
     Paste(crate::ClipboardContent, Option<Option<String>>),
     /// A `Tx::read_clipboard` callback's id and what the clipboard held.
     ClipboardRead(u64, crate::ClipboardContent),
-    /// A `Tx::open_file` or `Tx::save_file` callback's id and the dialog's answer.
-    FileDialog(u64, crate::file_dialog::FileDialogResult),
+    /// A file dialog callback's id and the dialog's answer: the chosen paths, none on cancel.
+    FileDialog(u64, crate::file_dialog::FilesDialogResult),
     Focus(String, f32, f32),
     /// A text field's menu: the field, the window point it opens at, and where in the field a
     /// press asked for it (none from the keyboard).
