@@ -1,6 +1,7 @@
 //! Drop files into a Rune window from Finder, Explorer or a file manager. `cargo run -p
 //! drop-files`. The pictures zone takes images only; the other zone takes anything; a drop
-//! anywhere else lands on the window. Each drop prints `drop <target> <files>`.
+//! anywhere else lands on the window. Each drop prints `drop <target> <paths>`, and a zone
+//! lighting up or going dark under a drag prints `hover <zone> <true|false>`.
 //!
 //! Headless, with the highlight held before each drop:
 //! `cargo run -p drop-files -- --script examples/drop-files/scripts/drop.json --frames 90 --every 6 --cols 5 --strip strip.png`
@@ -23,7 +24,7 @@ fn names(files: &[PathBuf]) -> String {
 }
 
 fn dropped(s: &mut State, target: &'static str, files: &[PathBuf]) {
-    println!("drop {target} {}", names(files));
+    println!("drop {target} {}", files.iter().map(|f| f.display().to_string()).collect::<Vec<_>>().join(", "));
     s.last = Some((target, files.to_vec()));
 }
 
@@ -37,6 +38,7 @@ fn zone(s: &State, accent: Color, key: &'static str, title: &str, detail: &str) 
         .child(text(detail).font(type_::LABEL).color(t.text_secondary))
         .on_drop_files(move |s: &mut State, files, _| dropped(s, key, files))
         .on_drop_hover(move |s: &mut State, over, _| {
+            println!("hover {key} {over}");
             if over { s.over = Some(key) } else if s.over == Some(key) { s.over = None }
         })
 }

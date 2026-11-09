@@ -1,6 +1,6 @@
 //! What a window holds per OS: on macOS its display link, present hook, panel and native
-//! views; on Linux desktops its activation helper; on Windows its first-frame cloak; elsewhere
-//! nothing.
+//! views; on Linux desktops its activation helper and Wayland drop target; on Windows its
+//! first-frame cloak; elsewhere nothing.
 
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
@@ -67,6 +67,8 @@ mod tests;
 #[derive(Default)]
 pub(super) struct Native {
     pub(super) activator: Option<crate::platform::activation::Activator>,
+    /// Takes file drags on Wayland, where winit 0.30 reports none.
+    pub(super) drop: Option<crate::platform::wayland_drop::WaylandDrop>,
 }
 
 #[cfg(target_os = "windows")]
