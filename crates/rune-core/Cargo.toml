@@ -6,6 +6,8 @@ license.workspace = true
 description = "Zero-GPU, zero-windowing foundation primitives for Rune: colour, design tokens, themes, vector shapes, state machines, clocks, off-UI tasks, tracked reads, growth curves, live values, latest-wins requests, launch marks, app directories, and preferences."
 
 [dependencies]
+# The sweep that tessellates `Area`: holes, crossing contours, even-odd and non-zero fill.
+lyon_tessellation = "1.0.22"
 portable-atomic = "1"
 rune-motion = { workspace = true }
 rustc-hash = { workspace = true }
