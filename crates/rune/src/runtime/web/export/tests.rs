@@ -242,3 +242,13 @@ fn html_export_omits_secure_fields_labels_and_containers() {
         }
     }
 }
+
+#[test]
+fn an_area_exports_as_one_path_with_its_fill_rule() {
+    let ring = crate::Path::new()
+        .polygon([[0.0, 0.0], [30.0, 0.0], [30.0, 30.0], [0.0, 30.0]])
+        .polygon([[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]);
+    let area = crate::Area::new(&ring, crate::FillRule::EvenOdd);
+    let svg = css::svg(&crate::Shape::new().fill_area(&area, crate::Color::WHITE), (30.0, 30.0));
+    assert!(svg.contains(" fill-rule=\"evenodd\" d=\"M0,0L30,0L30,30L0,30ZM10,10L20,10L20,20L10,20Z\"/>"), "{svg}");
+}

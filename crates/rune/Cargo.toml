@@ -255,6 +255,9 @@ name = "integration"
 name = "alloc"
 
 [[test]]
+name = "area_map_cost"
+
+[[test]]
 name = "extra_args"
 
 [[test]]
