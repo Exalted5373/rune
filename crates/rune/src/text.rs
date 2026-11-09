@@ -30,6 +30,8 @@ mod case;
 mod color_icon;
 mod cursor;
 mod decorations;
+mod direction;
+pub use direction::TextDirection;
 mod families;
 mod language;
 pub use language::set_language;
@@ -57,6 +59,8 @@ mod measure;
 mod pill_chips;
 mod rich_layout;
 mod run;
+mod script_fonts;
+pub use script_fonts::set_script_fonts;
 pub(crate) use pill_chips::pill_chips;
 mod svg_path;
 mod trak;
@@ -66,7 +70,7 @@ pub use line_metrics::{last_line_fill, layout_height, stream_height_lag};
 pub(crate) use underline::underline_edges;
 pub use case::TextCase;
 pub use hash::text_hash;
-pub(crate) use hash::{elide_key, shape_key};
+pub(crate) use hash::{directed, elide_key, shape_key};
 pub(crate) use families::choose_families;
 pub use measure::{FamiliesGuard, TextInk, advance, font_epoch, ink, measure, measure_with, with_families};
 pub use rich_layout::RichLayoutOptions;
@@ -163,6 +167,8 @@ pub struct TextSystem {
     slot_system_mono: bool,
     /// Bit `i` is set once `fallback::SCRIPT_FONTS[i]` has been looked up.
     scripts: u64,
+    /// The app's own fonts for scripts, ahead of those fallbacks (`set_script_fonts`).
+    script_fonts: script_fonts::ScriptMap,
     font_files: LoadedFiles,
     pub atlas: Atlas,
     color_glyphs: GlyphMap<ColorGlyph>,
@@ -294,6 +300,7 @@ impl TextSystem {
             system_mono: None,
             slot_system_mono: names_system_mono(families.0) || names_system_mono(families.1),
             scripts: 0,
+            script_fonts: Default::default(),
             font_files,
             atlas: Atlas::new(),
             color_glyphs: GlyphMap::default(),
@@ -443,15 +450,18 @@ impl TextSystem {
         max_width: Option<f32>,
         align: Alignment,
         wrap_anywhere: bool,
+        direction: TextDirection,
         cache: bool,
     ) -> Rc<Layout<Ink>> {
         self.follow_language();
+        self.follow_script_fonts();
+        let base_direction = direction.base();
         let shared = (!cache).then(|| std::mem::replace(&mut self.layout_cx, LayoutContext::new()));
         let has_indented_blocks = blocks.iter().any(|&b| b != crate::edit::Block::Paragraph);
-        // Shaping depends on the text, spans, style, scale, overflow-wrap and pills; line
-        // breaking adds the width, alignment and block indents. A layout cached at one width
+        // Shaping depends on the text, spans, style, scale, overflow-wrap, direction and pills;
+        // line breaking adds the width, alignment and block indents. A layout cached at one width
         // is re-broken at another rather than shaped again.
-        let shape_key = shape.unwrap_or_else(|| shape_key(text, spans, style, scale, wrap_anywhere, pills));
+        let shape_key = shape.unwrap_or_else(|| directed(shape_key(text, spans, style, scale, wrap_anywhere, pills), direction));
         let key = hash::break_key(shape_key, max_width, align, has_indented_blocks.then_some(blocks));
         let g = self.generation;
         if cache && let Some(Entry { value: l, used, .. }) = self.layouts.get_mut(&key) {
@@ -561,10 +571,10 @@ impl TextSystem {
         let span_spacing: Vec<Option<f32>> = spans
             .iter()
             .map(|s| {
-                if !(s.mono || s.italic || s.weight.is_some() || s.size.is_some()) {
+                if !(s.mono || s.italic || s.weight.is_some() || s.size.is_some() || s.family.is_some()) {
                     return None;
                 }
-                let family = if s.mono { Family::Mono } else { style.family };
+                let family = s.family.unwrap_or(if s.mono { Family::Mono } else { style.family });
                 let trak = self.primary_trak(family, s.weight.unwrap_or(style.weight), s.italic || style.italic);
                 Some(spacing(trak, s.size.unwrap_or(style.size))).filter(|&v| v != base_spacing)
             })
@@ -574,7 +584,7 @@ impl TextSystem {
         let span_axes: Vec<Rc<[parley::FontVariation]>> = spans
             .iter()
             .map(|s| {
-                let family = if s.mono { Family::Mono } else { style.family };
+                let family = s.family.unwrap_or(if s.mono { Family::Mono } else { style.family });
                 self.primary_axes(family, s.weight.unwrap_or(style.weight), s.italic || style.italic)
             })
             .collect();
@@ -595,7 +605,7 @@ impl TextSystem {
                 .chain(self.symbol_families.iter().chain(math).map(|name| FontFamilyName::named(name)))
                 .collect::<Vec<_>>()
         };
-        let sans = match style.family {
+        let stack_for = |family: Family| match family {
             Family::Sans => with_symbols(self.sans.as_str()),
             Family::Mono => with_symbols(self.mono.as_str()),
             Family::Named(name) => {
@@ -609,7 +619,17 @@ impl TextSystem {
                 families
             }
         };
+        let sans = stack_for(style.family);
         let mono = with_symbols(self.mono.as_str());
+        let span_stacks: Vec<Option<Vec<FontFamilyName<'_>>>> = spans.iter().map(|s| s.family.map(stack_for)).collect();
+        // Text in a script the app mapped tries the app's fonts after its own families (an
+        // element's, or a mono or family span's), before the symbol and system ones they end with.
+        let own = |at: usize| {
+            spans.iter().zip(&span_stacks).rev()
+                .find(|(s, _)| (s.start as usize) <= at && at < s.end as usize && (s.mono || s.family.is_some()))
+                .map_or(sans.as_slice(), |(_, stack)| stack.as_deref().unwrap_or(&mono))
+        };
+        let scripted = self.script_fonts.stacks(text, spans, self.symbol_families.len() + math.len(), own);
         let language = self.language;
         // Routed clusters try their fallback first, then the run's own stack (mono spans included).
         // Each of the four {math, emoji} × {sans, mono} stacks is built at most once.
@@ -636,6 +656,7 @@ impl TextSystem {
         type Spacings = [(std::ops::Range<usize>, f32)];
         let build = |lcx: &mut LayoutContext<Ink>, fcx: &mut FontContext, exact: &Spacings, widen: &Spacings| {
             let mut b = lcx.ranged_builder(fcx, text, scale, true);
+            b.set_base_direction(base_direction);
             b.push_default(FontFamily::from(sans.as_slice()));
             b.push_default(StyleProperty::Locale(language));
             b.push_default(StyleProperty::FontSize(style.size));
@@ -646,6 +667,16 @@ impl TextSystem {
             // Parley turns optional ligatures off under letter spacing; Core Text's tracking
             // keeps them, so spacing that only corrects `trak` turns them back on.
             let corrected = base_spacing != 0.0 || span_spacing.iter().flatten().chain(exact.iter().map(|e| &e.1)).any(|&v| v != 0.0);
+            // A span's features go on top of the ones its run would otherwise get.
+            let inherited = |mono: bool| -> Vec<parley::FontFeature> {
+                if mono || mono_style {
+                    unligated.clone()
+                } else if style.tracking == 0.0 && corrected {
+                    [b"liga", b"clig"].map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 1)).into_iter().chain(features.iter().copied()).collect()
+                } else {
+                    features.clone()
+                }
+            };
             if mono_style {
                 b.push_default(StyleProperty::FontFeatures(unligated.as_slice().into()));
             } else if style.tracking == 0.0 && corrected {
@@ -678,6 +709,14 @@ impl TextSystem {
                     b.push(FontFamily::from(mono.as_slice()), r.clone());
                     b.push(StyleProperty::FontFeatures(unligated.as_slice().into()), r.clone());
                 }
+                if let Some(stack) = &span_stacks[i] {
+                    b.push(FontFamily::from(stack.as_slice()), r.clone());
+                }
+                if !s.features.is_empty() {
+                    let mut list = inherited(s.mono);
+                    list.extend(parley::FontFeature::parse_css_list(s.features).flatten());
+                    b.push(StyleProperty::FontFeatures(parley::FontFeatures::List(std::borrow::Cow::Owned(list))), r.clone());
+                }
                 if let Some(w) = s.weight {
                     b.push(StyleProperty::FontWeight(FontWeight::new(w)), r.clone());
                 }
@@ -698,6 +737,9 @@ impl TextSystem {
                 if let Some(v) = span_spacing[i] {
                     b.push(StyleProperty::LetterSpacing(v), r.clone());
                 }
+            }
+            for (range, stack) in &scripted {
+                b.push(FontFamily::from(stack.as_slice()), range.clone());
             }
             for (range, stack) in &routed {
                 b.push(FontFamily::from(stacks[*stack].as_deref().unwrap_or_default()), range.clone());

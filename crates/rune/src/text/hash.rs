@@ -3,7 +3,7 @@
 //! measuring and re-breaking a long paragraph doesn't rehash its bytes.
 use std::hash::{Hash, Hasher};
 
-use super::{PillChip, Span};
+use super::{PillChip, Span, TextDirection};
 use crate::tok::{OpticalSize, TextStyle};
 
 /// A fast, non-cryptographic hasher: bytes go through `rustc_hash`'s string hash and each word
@@ -37,7 +37,7 @@ pub fn text_hash(text: &str, spans: &[Span], style: TextStyle, scale: f32, width
     let mut h = KeyHasher::default();
     text.hash(&mut h);
     for s in spans {
-        (s.start, s.end, s.mono, s.weight.map(f32::to_bits), s.size.map(f32::to_bits), s.italic).hash(&mut h);
+        (s.start, s.end, s.mono, s.weight.map(f32::to_bits), s.size.map(f32::to_bits), s.italic, s.family, s.features).hash(&mut h);
     }
     (style.size.to_bits(), style.weight.to_bits(), style.family, style.line_height.to_bits(), style.tracking.to_bits())
         .hash(&mut h);
@@ -60,6 +60,16 @@ pub(crate) fn shape_key(text: &str, spans: &[Span], style: TextStyle, scale: f32
     for p in pills {
         (p.start, p.end, p.icon.is_some()).hash(&mut h);
     }
+    h.finish()
+}
+
+/// A [`shape_key`] shaped in `direction`: the key itself in the automatic direction.
+pub(crate) fn directed(shape: u64, direction: TextDirection) -> u64 {
+    if direction == TextDirection::Auto {
+        return shape;
+    }
+    let mut h = KeyHasher::default();
+    (shape, direction).hash(&mut h);
     h.finish()
 }
 

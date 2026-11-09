@@ -47,11 +47,11 @@ impl ScriptFonts {
     }
 }
 
-const HEBREW: &[(u32, u32)] = &[(0x0590, 0x05FF), (0xFB1D, 0xFB4F)];
-const ARABIC: &[(u32, u32)] = &[(0x0600, 0x06FF), (0x0750, 0x077F), (0x0870, 0x08FF), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF)];
-const DEVANAGARI: &[(u32, u32)] = &[(0x0900, 0x097F), (0xA8E0, 0xA8FF)];
-const BENGALI: &[(u32, u32)] = &[(0x0980, 0x09FF)];
-const THAI: &[(u32, u32)] = &[(0x0E00, 0x0E7F)];
+pub(super) const HEBREW: &[(u32, u32)] = &[(0x0590, 0x05FF), (0xFB1D, 0xFB4F)];
+pub(super) const ARABIC: &[(u32, u32)] = &[(0x0600, 0x06FF), (0x0750, 0x077F), (0x0870, 0x08FF), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF)];
+pub(super) const DEVANAGARI: &[(u32, u32)] = &[(0x0900, 0x097F), (0xA8E0, 0xA8FF)];
+pub(super) const BENGALI: &[(u32, u32)] = &[(0x0980, 0x09FF)];
+pub(super) const THAI: &[(u32, u32)] = &[(0x0E00, 0x0E7F)];
 
 #[cfg(target_os = "macos")]
 pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[

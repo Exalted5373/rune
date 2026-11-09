@@ -304,6 +304,7 @@ pub use text::Link;
 pub use text::LinkPaint;
 pub use text::Span;
 pub use text::TextCase;
+pub use text::TextDirection;
 pub use text::TextHighlight;
 pub use theme::Theme;
 pub use time::LocalTime;
