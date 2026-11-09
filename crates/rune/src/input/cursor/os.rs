@@ -214,6 +214,8 @@ fn icon(c: Cursor) -> CursorIcon {
         Cursor::Move => CursorIcon::Move,
         Cursor::ResizeColumn => CursorIcon::ColResize,
         Cursor::ResizeRow => CursorIcon::RowResize,
+        Cursor::ResizeNwse => CursorIcon::NwseResize,
+        Cursor::ResizeNesw => CursorIcon::NeswResize,
         Cursor::Crosshair => CursorIcon::Crosshair,
         Cursor::Cell => CursorIcon::Cell,
         Cursor::ZoomIn => CursorIcon::ZoomIn,

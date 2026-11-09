@@ -1,0 +1,1 @@
+- **`Cursor::ResizeNwse` and `Cursor::ResizeNesw`** are the diagonal resize cursors (CSS `nwse-resize` and `nesw-resize`), for a crop frame's corner handles: winit's on Windows, X11 and Wayland, the cursor-shape protocol's on layer-shell overlays, and the arrow on macOS, which has no public cursor for them.
