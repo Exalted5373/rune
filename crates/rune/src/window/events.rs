@@ -51,6 +51,8 @@ impl<S: 'static> Host<S> {
     pub(super) fn flush_files(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(target_os = "macos")]
         let appkit = self.win.as_ref().map(|l| crate::platform::macos::drop::take(&l.window)).unwrap_or_default();
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        let wayland = self.win.as_ref().and_then(|l| l.native.drop.as_ref()).map(|d| d.take()).unwrap_or_default();
         let Some(l) = self.win.as_ref().filter(|w| w.visible) else {
             self.files = FileDrop::default();
             return;
@@ -61,6 +63,17 @@ impl<S: 'static> Host<S> {
         #[cfg(target_os = "macos")]
         for step in appkit {
             use crate::platform::macos::drop::Step;
+            queued |= match step {
+                Step::Enter(paths, at) => { self.rt.drag_files(paths, Some(at)); true }
+                Step::Move(at) => self.rt.drag_files_to(Some(at)),
+                Step::Drop(paths, at) => { self.rt.drop_files(paths, Some(at)); true }
+                Step::Leave => { self.rt.drag_files_leave(); true }
+            };
+        }
+        // Wayland's drags say where they are at every step too (`wayland_drop`).
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        for step in wayland {
+            use crate::platform::wayland_drop::Step;
             queued |= match step {
                 Step::Enter(paths, at) => { self.rt.drag_files(paths, Some(at)); true }
                 Step::Move(at) => self.rt.drag_files_to(Some(at)),
@@ -136,7 +149,8 @@ impl<S: 'static> Host<S> {
                 self.shell(event_loop);
             }
             WakeEvent::A11y(_) => self.a11y_receive(),
-            WakeEvent::Reopen | WakeEvent::Turn => {}
+            // The turn's `about_to_wait` hands the drag's steps over (`flush_files`).
+            WakeEvent::Reopen | WakeEvent::Turn | WakeEvent::Files(_) => {}
         }
     }
 

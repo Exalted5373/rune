@@ -93,6 +93,10 @@ pub(crate) enum WakeEvent {
     /// the host answers at the end of the turn this wakes.
     #[cfg_attr(not(feature = "accessibility"), allow(dead_code))]
     A11y(usize),
+    /// A file drag over a Wayland window has steps waiting: the turn this wakes hands them
+    /// over (`Host::flush_files`).
+    #[cfg_attr(not(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))), allow(dead_code))]
+    Files(usize),
     /// A native menu's modal loop holds the event loop: run its idle turn (`Windows::turn`).
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     Turn,
@@ -274,7 +278,7 @@ impl ApplicationHandler<WakeEvent> for Windows {
         let slot = match &event {
             WakeEvent::DisplayTick(i) | WakeEvent::App(i) | WakeEvent::Live(i) | WakeEvent::Window(i, _) | WakeEvent::Focus(i)
                 | WakeEvent::Position(i, _) | WakeEvent::Level(i, _) | WakeEvent::Place(i, _) | WakeEvent::Frame(i, _)
-                | WakeEvent::A11y(i) => *i,
+                | WakeEvent::A11y(i) | WakeEvent::Files(i) => *i,
             WakeEvent::Reopen => {
                 self.reopen(event_loop);
                 self.cleanup(event_loop);

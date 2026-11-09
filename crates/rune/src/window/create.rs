@@ -195,7 +195,13 @@ impl<S: 'static> Host<S> {
         cloak.extend(Instant::now() + win::READY_FALLBACK);
         #[cfg(target_os = "windows")]
         let native = Native { cloak, frame };
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        let native = {
+            let handle = self.native_handle.clone();
+            let drop = crate::platform::wayland_drop::WaylandDrop::new(&window, Arc::new(move || handle.send(WakeEvent::Files)));
+            Native { drop, ..Native::default() }
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "ios"), not(target_os = "android")))))]
         let native = Native::default();
         self.win = Some(Win {
             a11y,

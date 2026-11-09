@@ -1,6 +1,6 @@
 //! What a window holds per OS: on macOS its display link, present hook, panel and native
-//! views; on Linux desktops its activation helper; on Windows its first-frame cloak; elsewhere
-//! nothing.
+//! views; on Linux desktops its activation helper and Wayland drop target; on Windows its
+//! first-frame cloak; elsewhere nothing.
 
 /// Dropped before the surface and the window, so its AppKit observers and views go while both
 /// still exist.
@@ -31,6 +31,8 @@ pub(super) struct Native {
 #[derive(Default)]
 pub(super) struct Native {
     pub(super) activator: Option<crate::platform::activation::Activator>,
+    /// Takes file drags on Wayland, where winit 0.30 reports none.
+    pub(super) drop: Option<crate::platform::wayland_drop::WaylandDrop>,
 }
 
 #[cfg(target_os = "windows")]
