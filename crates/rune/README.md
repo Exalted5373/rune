@@ -72,12 +72,17 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
     Sketch / Figma shadow blur specify `r ≈ σ`, so pass `blur = 2.0 * r` to match a `CALayer` shadow
     radius (whereas `.blur(sigma)` takes `σ` directly).
   - Vector shapes (`shape.rs`): `El::shape(Shape)` and `canvas(shape)` paint strokes (polylines,
-    round or butt caps, open or closed) and fills (simple polygons, ear-clipped) in the element's own
-    points, or in a `view_box` stretched to the element's size; `Path` flattens quadratic and cubic
-    Béziers. Strokes are one analytic capsule/box per
+    round or butt caps, open or closed), fills (simple polygons, ear-clipped) and areas in the
+    element's own points, or in a `view_box` stretched to the element's size; `Path` flattens
+    quadratic and cubic Béziers. Strokes are one analytic capsule/box per
     segment (`KIND_SEGMENT`); fills are triangles (`KIND_TRIANGLE`) antialiased only on polygon
     edges, so they have no seams. No atlas, so a shape can change every frame (`examples/shapes`).
     Translucent strokes blend twice where segments overlap at a joint; fills do not overlap.
+  - An `Area` (`shape/area.rs`) is a `Path`'s contours filled together under a `FillRule`
+    (non-zero or even-odd): outlines with holes, groups of islands, crossing contours. It is
+    tessellated once, when made, by lyon's sweep into the same seamless triangles, and shared by
+    its clones, so a map kept in state pans and zooms without tessellating again;
+    `Area::contains` hit-tests a point by the same rule.
   - Every instance has a soft-edge clip (`clip_soft`, `clip_fade`).
   - Windows blend in sRGB-encoded space by default, as Core Animation, CoreText and CSS do.
     `.srgb_blend(false)` on `App`, `WindowSpec` or `ConfiguredOverlay` opts out into linear-light
