@@ -291,7 +291,7 @@ pub(super) fn text_html(spec: &TextSpec) -> String {
     out
 }
 
-/// A shape as inline SVG: fills as paths, strokes as polylines, stretched like Rune's.
+/// A shape as inline SVG: fills and areas as paths, strokes as polylines, stretched like Rune's.
 pub(super) fn svg(shape: &crate::Shape, size: (f32, f32)) -> String {
     let [w, h] = shape.view_box.unwrap_or([size.0, size.1]);
     let mut out = format!(
@@ -310,6 +310,12 @@ pub(super) fn svg(shape: &crate::Shape, size: (f32, f32)) -> String {
                 if fill.as_ref().is_some_and(|(fc, _)| fc != c) { flush(&mut out, &mut fill); }
                 let d = &mut fill.get_or_insert_with(|| (*c, String::new())).1;
                 let _ = write!(d, "M{}Z", points(pts).replace(' ', "L"));
+            }
+            crate::shape::Op::Area { area, color: c } => {
+                flush(&mut out, &mut fill);
+                let rule = if area.rule() == crate::FillRule::EvenOdd { "evenodd" } else { "nonzero" };
+                let d: String = area.contours().map(|ring| format!("M{}Z", points(ring).replace(' ', "L"))).collect();
+                let _ = write!(out, "<path fill=\"{}\" fill-rule=\"{rule}\" d=\"{d}\"/>", color(*c));
             }
             crate::shape::Op::Stroke { points: pts, closed, width, cap, color: c } => {
                 flush(&mut out, &mut fill);

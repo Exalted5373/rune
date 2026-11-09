@@ -288,6 +288,8 @@ pub use runtime::Waker;
 pub use runtime::commit_generation;
 #[doc(hidden)]
 pub use runtime::scroll_watch_state;
+pub use shape::Area;
+pub use shape::FillRule;
 pub use shape::LineCap;
 pub use shape::Path;
 pub use shape::Shape;
