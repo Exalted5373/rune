@@ -6,6 +6,20 @@ use super::*;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn push_shape(out: &mut Vec<Instance>, shape: &Shape, origin: [f32; 2], k: [f32; 2], k_px: f32, opacity: f32, srgb: bool, clip: [f32; 4], fade: [f32; 4]) {
     let at = |p: [f32; 2]| [origin[0] + p[0] * k[0], origin[1] + p[1] * k[1]];
+    let triangle = |out: &mut Vec<Instance>, [a, b, c]: [[f32; 2]; 3], aa: u32, fill: [f32; 4]| {
+        let (x0, y0) = (a[0].min(b[0]).min(c[0]), a[1].min(b[1]).min(c[1]));
+        let (x1, y1) = (a[0].max(b[0]).max(c[0]), a[1].max(b[1]).max(c[1]));
+        out.push(Instance {
+            rect: [x0, y0, x1 - x0, y1 - y0],
+            radii: [a[0], a[1], b[0], b[1]],
+            fill,
+            border: [0.0; 4],
+            params: [aa as f32, KIND_TRIANGLE, 0.0, 1.0],
+            uv: [c[0], c[1], 0.0, 0.0],
+            clip,
+            fade: crate::render::pack_fade(fade, clip, clip),
+        });
+    };
     for op in &shape.ops {
         match op {
             Op::Stroke { points, closed, width, cap, color } => {
@@ -37,20 +51,20 @@ pub(super) fn push_shape(out: &mut Vec<Instance>, shape: &Shape, origin: [f32; 2
                 if fill[3] <= 0.0005 {
                     continue;
                 }
-                for ([ia, ib, ic], aa) in crate::shape::triangulate(points) {
-                    let (a, b, c) = (at(points[ia]), at(points[ib]), at(points[ic]));
-                    let (x0, y0) = (a[0].min(b[0]).min(c[0]), a[1].min(b[1]).min(c[1]));
-                    let (x1, y1) = (a[0].max(b[0]).max(c[0]), a[1].max(b[1]).max(c[1]));
-                    out.push(Instance {
-                        rect: [x0, y0, x1 - x0, y1 - y0],
-                        radii: [a[0], a[1], b[0], b[1]],
-                        fill,
-                        border: [0.0; 4],
-                        params: [aa as f32, KIND_TRIANGLE, 0.0, 1.0],
-                        uv: [c[0], c[1], 0.0, 0.0],
-                        clip,
-                        fade: crate::render::pack_fade(fade, clip, clip),
-                    });
+                for (corners, aa) in crate::shape::triangulate(points) {
+                    triangle(out, corners.map(|i| at(points[i])), aa, fill);
+                }
+            }
+            Op::Area { area, color } => {
+                let fill = premul(*color, opacity, srgb);
+                if fill[3] <= 0.0005 {
+                    continue;
+                }
+                // Tessellated when the area was made: here its corners only move into place.
+                let (vertices, triangles) = area.mesh();
+                out.reserve(triangles.len());
+                for &(corners, aa) in triangles {
+                    triangle(out, corners.map(|i| at(vertices[i as usize])), aa, fill);
                 }
             }
         }
