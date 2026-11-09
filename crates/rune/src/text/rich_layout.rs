@@ -3,11 +3,13 @@
 use super::*;
 
 /// How [`TextSystem::layout_rich_with`] lays out a paragraph. The default is
-/// [`layout_rich`](TextSystem::layout_rich): start-aligned, breaking only between words.
+/// [`layout_rich`](TextSystem::layout_rich): start-aligned, breaking only between words, in the
+/// direction its first strong letter sets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RichLayoutOptions {
     align: Alignment,
     wrap_anywhere: bool,
+    direction: TextDirection,
 }
 
 impl RichLayoutOptions {
@@ -26,6 +28,13 @@ impl RichLayoutOptions {
     /// [`El::wrap_anywhere`](crate::El::wrap_anywhere) does. Words that fit still break at spaces.
     pub fn wrap_anywhere(mut self) -> Self {
         self.wrap_anywhere = true;
+        self
+    }
+
+    /// Runs each paragraph in `direction` instead of the one its first strong letter sets, as
+    /// [`El::text_direction`](crate::El::text_direction) does.
+    pub fn direction(mut self, direction: TextDirection) -> Self {
+        self.direction = direction;
         self
     }
 }
@@ -68,7 +77,7 @@ impl TextSystem {
         max_width: Option<f32>,
         options: RichLayoutOptions,
     ) -> Rc<Layout<Ink>> {
-        self.layout_blocks_inner(text, spans, &[], &[], style, scale, max_width, options.align, options.wrap_anywhere, true)
+        self.layout_keyed(None, text, spans, &[], &[], style, scale, max_width, options.align, options.wrap_anywhere, options.direction, true)
     }
 
     /// [`layout_aligned`](Self::layout_aligned) with per-paragraph [`Block`](crate::Block)
@@ -105,7 +114,7 @@ impl TextSystem {
         wrap_anywhere: bool,
         cache: bool,
     ) -> Rc<Layout<Ink>> {
-        self.layout_keyed(None, text, spans, blocks, pills, style, scale, max_width, align, wrap_anywhere, cache)
+        self.layout_keyed(None, text, spans, blocks, pills, style, scale, max_width, align, wrap_anywhere, TextDirection::Auto, cache)
     }
 
     /// Secure display runs must not enter the shared layout cache or leave character
@@ -119,7 +128,10 @@ impl TextSystem {
         align: Alignment,
     ) -> Rc<Layout<Ink>> {
         let shape = spec.shape_key(scale);
-        self.layout_keyed(shape, &spec.content, &spec.spans, &spec.blocks, &spec.pills, spec.style, scale, max_width, align, spec.wrap_anywhere, !spec.redacted)
+        self.layout_keyed(
+            shape, &spec.content, &spec.spans, &spec.blocks, &spec.pills, spec.style, scale, max_width, align, spec.wrap_anywhere,
+            spec.direction, !spec.redacted,
+        )
     }
 }
 

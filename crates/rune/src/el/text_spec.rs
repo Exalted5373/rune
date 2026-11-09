@@ -67,6 +67,8 @@ pub struct TextSpec {
     pub(crate) redacted: bool,
     pub(crate) secure_revealed: bool,
     pub(crate) wrap_anywhere: bool,
+    /// See [`El::text_direction`](crate::El::text_direction).
+    pub(crate) direction: crate::text::TextDirection,
     /// The scale's bits and [`crate::text::shape_key`] at it, once the content is final (see
     /// [`TextSpec::key_shape`]).
     pub(crate) shape: Option<(u32, u64)>,
@@ -108,15 +110,20 @@ impl TextSpec {
     /// this commit reuses it. Secure text keeps no content-derived key.
     pub(crate) fn key_shape(&mut self, scale: f32) {
         self.shape = (!self.redacted)
-            .then(|| (scale.to_bits(), crate::text::shape_key(&self.content, &self.spans, self.style, scale, self.wrap_anywhere, &self.pills)));
+            .then(|| (scale.to_bits(), self.fresh_shape_key(scale)));
     }
 
     /// The key [`Self::key_shape`] kept at `scale`.
     pub(crate) fn shape_key(&self, scale: f32) -> Option<u64> {
         let (_, key) = self.shape.filter(|s| s.0 == scale.to_bits())?;
-        debug_assert_eq!(key, crate::text::shape_key(&self.content, &self.spans, self.style, scale, self.wrap_anywhere, &self.pills),
-            "a text changed after its shape key was taken");
+        debug_assert_eq!(key, self.fresh_shape_key(scale), "a text changed after its shape key was taken");
         Some(key)
+    }
+
+    /// What shaping this text at `scale` depends on, hashed now.
+    pub(crate) fn fresh_shape_key(&self, scale: f32) -> u64 {
+        let shape = crate::text::shape_key(&self.content, &self.spans, self.style, scale, self.wrap_anywhere, &self.pills);
+        crate::text::directed(shape, self.direction)
     }
 
     /// Zeroizes the shown string and shows `content` instead.

@@ -130,6 +130,19 @@ impl<S: 'static> Runtime<S> {
         }
         None
     }
+    /// Whether an `El::rtl` row lays out item `i` of group `g`: one at or above `i`'s parent,
+    /// up to `g`. Left and Right then swap, so they move by what's on screen.
+    fn right_to_left(&self, i: usize, g: usize) -> bool {
+        let mut p = self.nodes[i].parent;
+        while let Some(j) = p {
+            if self.layout.style(self.nodes[j].taffy).flex_direction() == rune_taffy::prelude::FlexDirection::RowReverse {
+                return true;
+            }
+            if j == g { return false; }
+            p = self.nodes[j].parent;
+        }
+        false
+    }
     /// The `focus_highlight` row that `i` (a pointer target) belongs to.
     pub(super) fn highlight_row(&self, mut i: usize) -> Option<usize> {
         loop {
@@ -382,8 +395,9 @@ impl<S: 'static> Runtime<S> {
         // A focused field inside a list row (an inline rename) keeps its letters and arrows.
         if self.nodes[i].input.is_none() && let Some(g) = self.group(i) {
             let vertical = VERTICAL_ROLES.contains(&self.nodes[g].role);
-            let backward = matches!(ev.key, Key::Up) || (!vertical && ev.key == Key::Left);
-            let forward = matches!(ev.key, Key::Down) || (!vertical && ev.key == Key::Right);
+            let (left, right) = if !vertical && self.right_to_left(i, g) { (Key::Right, Key::Left) } else { (Key::Left, Key::Right) };
+            let backward = matches!(ev.key, Key::Up) || (!vertical && ev.key == left);
+            let forward = matches!(ev.key, Key::Down) || (!vertical && ev.key == right);
             let items: Vec<_> = (0..self.nodes.len()).filter(|&j| self.can_focus(j) && self.group(j) == Some(g)).collect();
             let pos = items.iter().position(|&j| j == i).unwrap();
             let page = matches!(ev.key, Key::PageUp | Key::PageDown) && PAGED_ROLES.contains(&self.nodes[g].role);

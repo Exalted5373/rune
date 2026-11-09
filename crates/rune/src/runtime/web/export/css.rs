@@ -234,6 +234,11 @@ pub(super) fn text(spec: &TextSpec, d: &mut Decls) {
     d.push(("line-height", px(if s.line_height > 0.0 { s.line_height } else { s.size * 1.25 })));
     if s.tracking != 0.0 { d.push(("letter-spacing", px(s.tracking))); }
     if s.italic { d.push(("font-style", "italic".into())); }
+    match spec.direction {
+        crate::TextDirection::Auto => {}
+        crate::TextDirection::Ltr => d.push(("direction", "ltr".into())),
+        crate::TextDirection::Rtl => d.push(("direction", "rtl".into())),
+    }
     d.push(("color", color(spec.color)));
     match spec.align {
         crate::el::Align::Start => {}
@@ -275,6 +280,8 @@ pub(super) fn text_html(spec: &TextSpec) -> String {
         if let Some(s) = spec.spans.iter().rev().find(|s| (s.start as usize) <= a && b <= s.end as usize) {
             if let Some(w) = s.weight { let _ = write!(style, "font-weight:{};", num(w)); }
             if s.mono { style.push_str("font-family:var(--rune-mono);"); }
+            if let Some(f) = s.family { let _ = write!(style, "font-family:{};", escape(&family(f))); }
+            if !s.features.is_empty() { let _ = write!(style, "font-feature-settings:{};", escape(s.features)); }
             if let Some(z) = s.size { let _ = write!(style, "font-size:{};", px(z)); }
             if let Some(c) = s.color { let _ = write!(style, "color:{};", color(c)); }
             if let Some(c) = s.bg { let _ = write!(style, "background:{};border-radius:3px;padding:0 {};", color(c), px(s.bg_pad)); }

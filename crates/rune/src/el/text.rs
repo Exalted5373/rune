@@ -226,6 +226,16 @@ impl El {
     pub fn wraps(&self) -> bool {
         self.text.as_ref().is_some_and(|t| t.wrap)
     }
+    /// Runs the text's paragraphs in `direction` instead of the one their first strong letter
+    /// sets: [`TextDirection::Rtl`](crate::TextDirection::Rtl) for a Hebrew verse that opens
+    /// with a Latin reference or a number, so its runs order right to left and its wrapped
+    /// lines start at the right (`Align::End` then puts them at the left).
+    pub fn text_direction(mut self, direction: crate::TextDirection) -> Self {
+        if let Some(t) = &mut self.text {
+            t.direction = direction;
+        }
+        self
+    }
     /// One line, cut with "…" when wider than the element; the element may shrink below its
     /// text's width. A [`text_input`] ignores it and the other truncations.
     pub fn truncate(self) -> Self {

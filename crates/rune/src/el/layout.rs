@@ -122,6 +122,19 @@ impl El {
         self.style.set_flex_wrap(FlexWrap::Wrap);
         self
     }
+    /// Lays a row's children out right to left (CSS `direction: rtl`): the first child at the
+    /// right edge and, with [`El::flex_wrap`], each line filling from the right, lines top to
+    /// bottom, as an interlinear Hebrew or Arabic verse reads. Justify and gap work from the
+    /// right (`justify_end` packs the children at the left). Hit-testing follows what's drawn,
+    /// Tab visits the children in order, which is their reading order, and Left and Right in a
+    /// focus group laid out by the row move by what's on screen: Left goes to the next child.
+    /// A column is unchanged.
+    pub fn rtl(mut self) -> Self {
+        if self.style.flex_direction() == FlexDirection::Row {
+            self.style.set_flex_direction(FlexDirection::RowReverse);
+        }
+        self
+    }
     /// Align children to the start of the cross axis (CSS `align-items: flex-start`).
     pub fn items_start(mut self) -> Self {
         self.style.set_align_items(AlignItems::FLEX_START);
