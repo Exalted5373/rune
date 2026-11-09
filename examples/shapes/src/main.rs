@@ -1,11 +1,13 @@
-//! Vector shapes: a filled waveform envelope, polylines, meters, a Bézier path and a concave
-//! polygon. `cargo run -p shapes -- --snap shapes.png` renders it headless; time animates the
-//! waveform, so `--at 1.5` shows another moment.
+//! Vector shapes: a filled waveform envelope, polylines, meters, a Bézier path, a concave
+//! polygon and areas with holes. `cargo run -p shapes -- --snap shapes.png` renders it headless;
+//! time animates the waveform, so `--at 1.5` shows another moment.
 
-use rune::{AppSpec, Color, Cx, El, LineCap, Path, Shape, Tx, canvas, col, row, text};
+use rune::{AppSpec, Area, Color, Cx, El, FillRule, LineCap, Path, Shape, Tx, canvas, col, row, text};
 
 struct State {
     t: f32,
+    /// Tessellated once at launch; every frame draws them again.
+    areas: [Area; 3],
 }
 
 const INK: Color = Color {
@@ -111,6 +113,29 @@ fn curves() -> Shape {
         .line([420.0, 10.0], [480.0, 86.0], 2.0, LineCap::Butt, INK)
 }
 
+/// A ring (a disc with a hole) and one self-crossing star under each fill rule: even-odd leaves
+/// the star's middle empty, non-zero fills it.
+fn areas() -> [Area; 3] {
+    let circle = |c: [f32; 2], r: f32| -> Vec<[f32; 2]> {
+        (0..64).map(|i| {
+            let a = i as f32 * std::f32::consts::TAU / 64.0;
+            [c[0] + a.cos() * r, c[1] + a.sin() * r]
+        }).collect()
+    };
+    let star = |c: [f32; 2]| -> Vec<[f32; 2]> {
+        (0..5).map(|i| {
+            let a = (i * 2) as f32 * std::f32::consts::TAU / 5.0 - std::f32::consts::FRAC_PI_2;
+            [c[0] + a.cos() * 40.0, c[1] + a.sin() * 40.0]
+        }).collect()
+    };
+    let ring = Path::new().polygon(circle([44.0, 46.0], 40.0)).polygon(circle([44.0, 46.0], 20.0));
+    [
+        Area::new(&ring, FillRule::EvenOdd),
+        Area::new(&Path::new().polygon(star([150.0, 50.0])), FillRule::EvenOdd),
+        Area::new(&Path::new().polygon(star([250.0, 50.0])), FillRule::NonZero),
+    ]
+}
+
 fn label(s: &str) -> El {
     text(s).color(INK)
 }
@@ -155,6 +180,12 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
                         .child(canvas(curves()).key("curves").size(490.0, 96.0)),
                 ),
         )
+        .child(label("Areas: a ring with a hole; a crossing star, even-odd then non-zero"))
+        .child(
+            canvas(s.areas.iter().zip([ACCENT, WARM, WARM]).fold(Shape::new(), |shape, (a, c)| shape.fill_area(a, c)))
+                .key("areas")
+                .size(300.0, 92.0),
+        )
 }
 
 fn poll(s: &mut State, t: f64, _: &mut Tx) -> bool {
@@ -163,5 +194,5 @@ fn poll(s: &mut State, t: f64, _: &mut Tx) -> bool {
 }
 
 fn main() {
-    rune::run(AppSpec { poll: Some(poll), ..AppSpec::new("Shapes", (820.0, 360.0), || State { t: 0.0 }, view) });
+    rune::run(AppSpec { poll: Some(poll), ..AppSpec::new("Shapes", (820.0, 500.0), || State { t: 0.0, areas: areas() }, view) });
 }

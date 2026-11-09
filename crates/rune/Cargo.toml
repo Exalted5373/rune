@@ -79,6 +79,8 @@ rustc-hash = "2"
 zeroize = "1.8"
 half = "2"
 unicode-segmentation = "1.13"
+# The sweep that tessellates `Area`: holes, crossing contours, even-odd and non-zero fill.
+lyon_tessellation = "1.0.22"
 resvg = { version = "0.45", default-features = false, optional = true }
 
 [target.'cfg(all(unix, not(target_os = "linux")))'.dependencies]
