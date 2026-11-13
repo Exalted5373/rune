@@ -1193,6 +1193,17 @@ falls back to the mono slot. SF Mono has no `trak` table, so it is untracked, as
 `tracking` still adds, and glyphs that fall back to the system font get that font's own
 tracking. Mono rich spans keep using the mono slot.
 
+A rich span can take its own family and features: `Span::new(a, b).family(Family::Named("Gentium Plus"))`
+shapes that range in Gentium (falling back as a named element family does, an installed one
+loading on first use), and `.features("'ss01'")` adds OpenType features on top of the
+element's, a span's tag winning over the same tag there. For whole scripts,
+`rune::text::set_script_fonts(&[("Hebr", "Noto Serif Hebrew"), ("Grek", "Gentium Plus")])`,
+called once before the first window, maps scripts (`Arab`, `Armn`, `Beng`, `Copt`, `Cyrl`,
+`Deva`, `Ethi`, `Grek`, `Hebr`, `Samr`, `Syrc`, `Thai`) to families among `AppSpec::fonts`:
+text in them that the element's own families don't draw takes the app's font before any
+system one (and, in code, before the monospace faces Rune finds for Arabic and Hebrew).
+`TextSystem::set_script_fonts` does the same for one text system.
+
 To put the mono slot itself (so `Family::Mono`, `.mono()` and mono rich spans) in that
 font, name CSS's `ui-monospace` in it: `families: ("Inter", "ui-monospace")`. It stands for
 the same families as `Family::SystemMono`, and the rest of the list follows it, so
