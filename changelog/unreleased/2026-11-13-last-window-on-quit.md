@@ -1,0 +1,1 @@
+- **Closing an app's last window runs its `App::on_quit`.** The window whose close started the quit had already closed when the quit's hooks ran, so it skipped them, and an app with one window ran no `on_quit` at all when the window manager or `AppHandle::close` closed it. It now runs `on_quit` after its `on_close`, as every window still open does.

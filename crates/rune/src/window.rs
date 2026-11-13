@@ -172,7 +172,8 @@ pub(crate) trait AnyHost {
     fn finished(&self) -> bool { false }
     /// The OS is ending the app without Rune asking: run close hooks before the hosts drop.
     fn terminate(&mut self) {}
-    /// The app starts to quit: runs `App::on_quit`, unless the window already closed.
+    /// The app starts to quit: runs `App::on_quit`, in a window still open or one whose close
+    /// started the quit.
     fn quit_hook(&mut self) {}
     /// The app quits: off the screen now, before any hook runs.
     fn vanish(&mut self) {}
@@ -252,10 +253,15 @@ impl Windows {
 
     fn cleanup(&mut self, event_loop: &ActiveEventLoop) {
         if !event_loop.exiting() { self.open_requested(event_loop); }
+        let ends = !self.hosts.iter().flatten().any(|h| h.keeps_loop() && !h.finished());
+        // The app ends with its last main window: the quit starts while the windows that closed
+        // for it are still here, so they run `App::on_quit` after their `on_close`, as the
+        // windows still open do. A quit already asked to exit ran the hooks.
+        if ends && !event_loop.exiting() { self.quit(event_loop, false, true); }
         // The last window closing ends a fast-exiting app: its host isn't dropped first, which
         // tore down its window, swap chain and device (~37 ms) before the process ended anyway.
         #[cfg(not(target_arch = "wasm32"))]
-        let ending = crate::quit::fast_exit_hook().is_some() && !self.hosts.iter().flatten().any(|h| !h.finished() && h.keeps_loop());
+        let ending = crate::quit::fast_exit_hook().is_some() && ends;
         #[cfg(target_arch = "wasm32")]
         let ending = false;
         for host in &mut self.hosts {
@@ -268,12 +274,10 @@ impl Windows {
         if event_loop.exiting() {
             for host in self.hosts.iter_mut().flatten() { host.cancel_menus(); }
         }
-        if !self.hosts.iter().flatten().any(|h| h.keeps_loop() && !h.finished()) {
-            // The app ends with its last main window: windows still open close as their close
-            // button would, once the quit's hooks ran. A quit already asked to exit and skips
-            // their close hooks.
+        if ends {
+            // Windows still open close as their close button would, once the quit's hooks ran.
+            // A quit already asked to exit skips their close hooks.
             if !event_loop.exiting() {
-                self.quit(event_loop, false, true);
                 for host in self.hosts.iter_mut().flatten() { host.terminate(); }
             }
             event_loop.exit();

@@ -127,8 +127,10 @@ impl<S: 'static> Host<S> {
         self.file_dialog.cancel(&mut self.rt);
     }
 
+    /// A window that closed in an earlier turn is gone by now (`Windows::cleanup`); one whose
+    /// close this turn started the quit runs its hook too.
     fn quit_hook_in_turn(&mut self) {
-        let Some(f) = self.on_quit.filter(|_| !self.life.finished()) else { return };
+        let Some(f) = self.on_quit else { return };
         self.rt.update(f);
         // Before the loop ends or the session does: a lock or clear must reach the worker.
         self.clipboard.flush(&mut self.rt);

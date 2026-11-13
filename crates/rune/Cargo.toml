@@ -310,6 +310,10 @@ name = "secondary_window"
 harness = false
 
 [[test]]
+name = "quit_last_window"
+harness = false
+
+[[test]]
 name = "macos_overlay_source"
 harness = false
 
