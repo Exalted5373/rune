@@ -83,6 +83,8 @@ pub use pretty::set_pretty_wrap;
 pub(crate) use pretty::pretty_wrap;
 mod rich_layout;
 mod run;
+mod script_fonts;
+pub use script_fonts::set_script_fonts;
 pub(crate) use pill_chips::{bare_icons, pill_chips};
 mod support;
 pub use support::SmoothingSupport;
@@ -220,6 +222,8 @@ pub struct TextSystem {
     slot_system_mono: bool,
     /// Bit `i` is set once `fallback::SCRIPT_FONTS[i]` has been looked up.
     scripts: u64,
+    /// The app's own fonts for scripts, ahead of the system's (`set_script_fonts`).
+    script_fonts: script_fonts::ScriptMap,
     font_files: LoadedFiles,
     /// The system fonts looked up so far, and the app's own (`load_fallbacks`).
     fallbacks: system_fonts::Fallbacks,
@@ -349,6 +353,7 @@ impl TextSystem {
             system_mono: None,
             slot_system_mono: names_system_mono(families.0) || names_system_mono(families.1),
             scripts: 0,
+            script_fonts: Default::default(),
             font_files: LoadedFiles::new(),
             fallbacks: system_fonts::Fallbacks::new(list, cjk),
             system_faces: Default::default(),
@@ -608,6 +613,7 @@ impl TextSystem {
         base: parley::BaseDirection,
     ) -> Rc<Layout<Ink>> {
         self.follow_language();
+        self.follow_script_fonts();
         let cache = keep == Keep::Cached;
         let shared = (keep == Keep::Secret).then(|| std::mem::replace(&mut self.layout_cx, LayoutContext::new()));
         let has_indented_blocks = blocks.iter().any(|&b| b != crate::edit::Block::Paragraph);
@@ -709,10 +715,10 @@ impl TextSystem {
         let span_spacing: Vec<Option<f32>> = spans
             .iter()
             .map(|s| {
-                if !(s.mono || s.italic || s.weight.is_some() || s.size.is_some()) {
+                if !(s.mono || s.italic || s.weight.is_some() || s.size.is_some() || s.family.is_some()) {
                     return None;
                 }
-                let family = if s.mono { Family::Mono } else { style.family };
+                let family = s.family.unwrap_or(if s.mono { Family::Mono } else { style.family });
                 let trak = self.primary_trak(family, s.weight.unwrap_or(style.weight), s.italic || style.italic);
                 Some(spacing(trak, s.size.unwrap_or(style.size))).filter(|&v| v != base_spacing)
             })
@@ -724,7 +730,7 @@ impl TextSystem {
         let span_axes: Vec<Rc<[parley::FontVariation]>> = spans
             .iter()
             .map(|s| {
-                let family = if s.mono { Family::Mono } else { style.family };
+                let family = s.family.unwrap_or(if s.mono { Family::Mono } else { style.family });
                 self.primary_axes(family, s.weight.unwrap_or(style.weight), s.italic || style.italic)
             })
             .collect();
@@ -733,11 +739,12 @@ impl TextSystem {
             settings.extend(extra);
             settings
         };
-        if style.family == Family::SystemMono || self.slot_system_mono {
+        let families = || std::iter::once(style.family).chain(spans.iter().filter_map(|s| s.family));
+        if self.slot_system_mono || families().any(|f| f == Family::SystemMono) {
             self.system_mono();
         }
-        if let Family::Named(list) = style.family {
-            self.load_installed(list);
+        for family in families() {
+            if let Family::Named(list) = family { self.load_installed(list); }
         }
         let math = self.math.as_deref().unwrap_or(&[]);
         let emoji = self.emoji.as_slice();
@@ -749,7 +756,7 @@ impl TextSystem {
                 .chain(extra.iter().chain(self.symbol_families.iter()).chain(math).chain(PLATFORM_FAMILY).map(|name| FontFamilyName::named(name)))
                 .collect::<Vec<_>>()
         };
-        let sans = match style.family {
+        let stack_for = |family: Family| match family {
             Family::Sans => with_symbols(self.sans.as_str(), &[]),
             Family::Mono => with_symbols(self.mono.as_str(), mono_scripts),
             Family::Named(list) => {
@@ -763,7 +770,21 @@ impl TextSystem {
                 families
             }
         };
+        let sans = stack_for(style.family);
         let mono = with_symbols(self.mono.as_str(), mono_scripts);
+        let span_stacks: Vec<Option<Vec<FontFamilyName<'_>>>> = spans.iter().map(|s| s.family.map(stack_for)).collect();
+        // Text in a script the app mapped tries the app's fonts after its own families (an
+        // element's, or a mono or family span's), before the fallbacks its stack ends with.
+        let tail = |family: Family| {
+            let scripts = if matches!(family, Family::Mono | Family::SystemMono) { mono_scripts.len() } else { 0 };
+            scripts + self.symbol_families.len() + math.len() + PLATFORM_FAMILY.len()
+        };
+        let covers = |s: &Span, at: usize| (s.start as usize) <= at && at < s.end as usize && (s.mono || s.family.is_some());
+        let own = |at: usize| match spans.iter().zip(&span_stacks).rev().find(|(s, _)| covers(s, at)) {
+            Some((s, stack)) => (stack.as_deref().unwrap_or(&mono), tail(s.family.unwrap_or(Family::Mono))),
+            None => (sans.as_slice(), tail(style.family)),
+        };
+        let scripted = self.script_fonts.stacks(text, spans, own);
         // Routed clusters try their fallback first, then the run's own stack (mono spans included).
         // Each of the four {math, emoji} × {sans, mono} stacks is built at most once.
         let mut stacks: [Option<Vec<FontFamilyName<'_>>>; 4] = Default::default();
@@ -837,6 +858,17 @@ impl TextSystem {
                     b.push(FontFamily::from(mono.as_slice()), r.clone());
                     b.push(StyleProperty::FontFeatures(unligated.as_slice().into()), r.clone());
                 }
+                if let Some(stack) = &span_stacks[i] {
+                    b.push(FontFamily::from(stack.as_slice()), r.clone());
+                }
+                if !s.features.is_empty() {
+                    // A span's features go on top of those its run would otherwise get.
+                    let relig = !s.mono && !mono_style && style.tracking == 0.0 && corrected;
+                    let ligatures = relig.then_some([b"liga", b"clig"]).into_iter().flatten().map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 1));
+                    let base = if s.mono || mono_style { &unligated } else { &features };
+                    let list = ligatures.chain(base.iter().copied()).chain(parley::FontFeature::parse_css_list(s.features).flatten()).collect();
+                    b.push(StyleProperty::FontFeatures(parley::FontFeatures::List(std::borrow::Cow::Owned(list))), r.clone());
+                }
                 if let Some(w) = s.weight {
                     b.push(StyleProperty::FontWeight(FontWeight::new(w)), r.clone());
                 }
@@ -866,6 +898,9 @@ impl TextSystem {
             }
             for (range, ink) in bold {
                 b.push(StyleProperty::Brush(Ink(*ink)), range.clone());
+            }
+            for (range, stack) in &scripted {
+                b.push(FontFamily::from(stack.as_slice()), range.clone());
             }
             for (range, stack) in &routed {
                 b.push(FontFamily::from(stacks[*stack].as_deref().unwrap_or_default()), range.clone());

@@ -643,7 +643,7 @@ fn key_paragraphs(spec: &TextSpec, style_key: u64, a: usize, z: usize, start_flo
         let mut h = hash::KeyHasher::default();
         (words, style_key, flow == Flow::Rtl, spec.cold.blocks.get(k).copied().unwrap_or(Block::Paragraph)).hash(&mut h);
         for s in spans_in(&spec.spans, a, b, &isolates) {
-            (s.start, s.end, s.mono, s.weight.map(f32::to_bits), s.size.map(f32::to_bits), s.italic).hash(&mut h);
+            (s.start, s.end, s.mono, s.weight.map(f32::to_bits), s.size.map(f32::to_bits), s.italic, s.family, s.features).hash(&mut h);
         }
         for p in pills_in(&spec.cold.pills, a, b, &isolates) {
             (p.start, p.end, p.icon.is_some(), p.bare.as_ref().map(|b| (b.size.to_bits(), b.gap.to_bits()))).hash(&mut h);
