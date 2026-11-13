@@ -19,6 +19,7 @@ mod loop_sleep;
 mod matched_scroll;
 mod no_motion;
 mod one_snap;
+mod paragraph_highlights;
 mod picture_scale;
 mod pointer_drag;
 mod pointer_hit;

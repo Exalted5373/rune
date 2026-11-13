@@ -450,7 +450,7 @@ impl<S: 'static> Runtime<S> {
                     let drawn = n.elided.map(|e| e.strikes(&strikes));
                     self.text.strike_decorations(layout, spans, drawn.as_deref().unwrap_or(&strikes), color, s, d_origin, &mut self.deco_scratch);
                 }
-                link_fx.decos(layout, drawn_len, s, d_origin, &mut self.deco_scratch);
+                link_fx.decos(piece, piece.shaped_len(drawn_len), s, d_origin, &mut self.deco_scratch);
                 if !spec.cold.rings.is_empty() || spec.cold.highlights.iter().any(|h| h.ring.is_some()) {
                     // Adjacent backgrounds overlap by bg_pad. Paint ringed chips after
                     // plain fills so a neighboring fill cannot erase an inset edge;
@@ -679,7 +679,7 @@ impl<S: 'static> Runtime<S> {
                     {
                         f = premul(c, o, srgb);
                     }
-                    if !link_fx.is_empty() && let Some(c) = link_fx.glyph_color(q.byte) {
+                    if !link_fx.is_empty() && let Some(c) = link_fx.glyph_color(piece.content(q.byte as usize) as u32) {
                         f = premul(c, o, srgb);
                     }
                     if let Some(fade) = reveal {
