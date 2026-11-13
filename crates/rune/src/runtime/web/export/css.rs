@@ -298,6 +298,8 @@ pub(super) fn text_html(spec: &TextSpec) -> String {
             if let Some(c) = s.bg { write!(style, "background:{};border-radius:3px;padding:0 {};", color(c), px(s.bg_pad)).ok(); }
             if let Some(c) = s.underline { write!(style, "text-decoration:underline {};", color(c)).ok(); }
             if s.italic { style.push_str("font-style:italic;"); }
+            if let Some(f) = s.family { let _ = write!(style, "font-family:{};", escape(&family(f))); }
+            if !s.features.is_empty() { let _ = write!(style, "font-feature-settings:{};", escape(s.features)); }
         }
         if style.is_empty() {
             out.push_str(&piece);

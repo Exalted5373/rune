@@ -326,8 +326,8 @@ impl Renderer {
 
 /// Compiler-checked destructuring of every [`Span`] field.
 fn hash_span(sp: &Span, h: &mut impl Hasher) {
-    let Span { start, end, weight, mono, size, color, bg, bg_pad, underline, italic } = *sp;
-    (start, end, weight.map(f32::to_bits), mono, size.map(f32::to_bits), color, bg, bg_pad.to_bits(), underline, italic).hash(h);
+    let Span { start, end, weight, mono, size, color, bg, bg_pad, underline, italic, family, features } = *sp;
+    (start, end, weight.map(f32::to_bits), mono, size.map(f32::to_bits), color, bg, bg_pad.to_bits(), underline, italic, family, features).hash(h);
 }
 
 fn hash_align(a: Align, h: &mut impl Hasher) {

@@ -261,6 +261,15 @@ name = "area_map_cost"
 name = "extra_args"
 
 [[test]]
+name = "rtl_rows"
+
+[[test]]
+name = "script_fonts"
+
+[[test]]
+name = "script_shaping"
+
+[[test]]
 name = "measure_scope"
 
 [[test]]
