@@ -168,6 +168,20 @@ impl<'a> Piece<'a> {
         }).collect())
     }
 
+    /// `highlights` over its words, on its shaped text.
+    pub(crate) fn highlights<'s>(&self, highlights: &'s [TextHighlight]) -> Cow<'s, [TextHighlight]> {
+        if self.whole { return Cow::Borrowed(highlights); }
+        Cow::Owned(highlights.iter().filter_map(|h| {
+            let (a, b) = self.clip(h.start as usize, h.end as usize)?;
+            Some(TextHighlight { start: a as u32, end: b as u32, ..h.clone() })
+        }).collect())
+    }
+
+    /// Its shaped text's length: `whole`, the drawn text's, for a whole layout.
+    pub(crate) fn shaped_len(&self, whole: usize) -> usize {
+        if self.whole { whole } else { self.shaped(self.end) }
+    }
+
     /// Content bytes `a..b` on its shaped text, when they meet its words.
     pub(crate) fn clip(&self, a: usize, b: usize) -> Option<(usize, usize)> {
         if self.whole { return (a < b).then_some((a, b)); }
@@ -308,6 +322,21 @@ impl<'a> TextFlow<'a> {
         self.pieces_in(f32::NEG_INFINITY, f32::INFINITY)
     }
 
+    /// Its pieces that hold content bytes `a..b`, top to bottom: a paragraph holds its start to
+    /// its end, the caret after its last word included.
+    pub(crate) fn pieces_over(self, a: usize, b: usize) -> Pieces<'a> {
+        match self {
+            TextFlow::Single(l) => Pieces { whole: Some(Piece::whole(l)), paragraphs: [].iter().enumerate(), bottom: f32::INFINITY },
+            TextFlow::Paragraphs(p) => {
+                let from = p.paragraphs.partition_point(|q| q.end < a);
+                let to = p.paragraphs.partition_point(|q| q.start <= b).max(from);
+                let mut paragraphs = p.paragraphs[..to].iter().enumerate();
+                if from > 0 { paragraphs.nth(from - 1); }
+                Pieces { whole: None, paragraphs, bottom: f32::INFINITY }
+            }
+        }
+    }
+
     /// The piece holding content byte `at`: a paragraph owns the bytes from its start to its end,
     /// the caret after its last word included.
     pub(crate) fn piece_at(self, at: usize) -> Piece<'a> {
@@ -420,9 +449,8 @@ impl<'a> TextFlow<'a> {
         };
         let mut out = Vec::new();
         if a >= b { return out; }
-        let from = pl.paragraphs.partition_point(|q| q.end < a);
-        for (k, q) in pl.paragraphs.iter().enumerate().skip(from).take_while(|(_, q)| q.start <= b) {
-            let p = Piece::of_paragraph(k, q);
+        for p in self.pieces_over(a, b) {
+            let k = p.index;
             let y = p.y as f64;
             let first = out.len();
             if let Some((sa, sb)) = p.clip(a, b) {

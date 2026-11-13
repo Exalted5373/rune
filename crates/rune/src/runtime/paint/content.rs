@@ -394,16 +394,17 @@ impl<S: 'static> Runtime<S> {
                 let spans = drawn_spans.as_deref().unwrap_or(&spans_here);
                 let drawn_rings = n.elided.map(|e| e.rings(&spec.cold.rings));
                 self.text.decorations_with_rings(layout, spans, drawn_rings.as_deref().unwrap_or(&spec.cold.rings), spec.cold.span_radius, s, d_origin, &mut self.deco_scratch);
-                let drawn_len = n.elided.map_or(spec.content.len(), |e| e.drawn_len(spec.content.len()));
-                if !spec.cold.highlights.is_empty() {
-                    let drawn = n.elided.map(|e| e.highlights(&spec.cold.highlights));
-                    self.text.highlight_decorations(layout, drawn.as_deref().unwrap_or(&spec.cold.highlights), drawn_len, s, d_origin, &mut self.deco_scratch);
+                let drawn_len = piece.shaped_len(n.elided.map_or(spec.content.len(), |e| e.drawn_len(spec.content.len())));
+                let highlights = piece.highlights(&spec.cold.highlights);
+                if !highlights.is_empty() {
+                    let drawn = n.elided.map(|e| e.highlights(&highlights));
+                    self.text.highlight_decorations(layout, drawn.as_deref().unwrap_or(&highlights), drawn_len, s, d_origin, &mut self.deco_scratch);
                 }
                 if !strikes.is_empty() {
                     let drawn = n.elided.map(|e| e.strikes(&strikes));
                     self.text.strike_decorations(layout, spans, drawn.as_deref().unwrap_or(&strikes), color, s, d_origin, &mut self.deco_scratch);
                 }
-                link_fx.decos(layout, drawn_len, s, d_origin, &mut self.deco_scratch);
+                link_fx.decos(piece, drawn_len, s, d_origin, &mut self.deco_scratch);
                 if !spec.cold.rings.is_empty() || spec.cold.highlights.iter().any(|h| h.ring.is_some()) {
                     // Adjacent backgrounds overlap by bg_pad. Paint ringed chips after
                     // plain fills so a neighboring fill cannot erase an inset edge;
@@ -618,14 +619,14 @@ impl<S: 'static> Runtime<S> {
                         f = c;
                     }
                     if has_hl_fg
-                        && let Some(c) = spec.cold.highlights.iter().rev().find_map(|h| {
+                        && let Some(c) = highlights.iter().rev().find_map(|h| {
                             let (a, b) = n.elided.map_or((h.start as usize, h.end as usize), |e| e.mark(h.start as usize, h.end as usize, false));
                             ((q.byte as usize) >= a && (q.byte as usize) < b).then_some(h.fg).flatten()
                         })
                     {
                         f = premul(c, o, srgb);
                     }
-                    if !link_fx.is_empty() && let Some(c) = link_fx.glyph_color(q.byte) {
+                    if !link_fx.is_empty() && let Some(c) = link_fx.glyph_color(piece.content(q.byte as usize) as u32) {
                         f = premul(c, o, srgb);
                     }
                     if let Some(fade) = reveal {

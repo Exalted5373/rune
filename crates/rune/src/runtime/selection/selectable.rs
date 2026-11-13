@@ -564,7 +564,7 @@ impl<S: 'static> Runtime<S> {
         let s = self.env.scale;
         let z = self.drawn_scale.get(i).copied().unwrap_or(1.0).max(1e-4);
         let (rect, x, y) = self.unturned_box_and_point(i, x, y);
-        let [ox, oy] = links::origin(n, spec, layout, rect, s, z);
+        let [ox, oy] = links::origin(n, spec, TextFlow::Single(layout), rect, s, z);
         let px = s / z;
         let at = crate::text::cursor_from_point(layout, (x - ox) * px, (y - oy) * px).index();
         Some(n.elided.map_or(at, |e| e.content(at)).min(spec.content.len()))

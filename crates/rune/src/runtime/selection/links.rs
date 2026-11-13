@@ -13,8 +13,8 @@ pub(super) struct LinkState {
 
 /// Where node `n`'s text starts inside its border box `rect` (points, x0 y0 x1 y1), its text
 /// drawn `k` times its size.
-pub(super) fn origin(n: &Node, spec: &TextSpec, layout: &Layout<Ink>, rect: [f32; 4], s: f32, k: f32) -> [f32; 2] {
-    let x = text_x(spec, rect[0] + n.inset[0] * k, rect[2] - n.inset[2] * k, (layout.full_width() * k).ceil() / s, crate::el::Flow::of_layout(layout));
+pub(super) fn origin(n: &Node, spec: &TextSpec, flow: TextFlow, rect: [f32; 4], s: f32, k: f32) -> [f32; 2] {
+    let x = text_x(spec, rect[0] + n.inset[0] * k, rect[2] - n.inset[2] * k, (flow.full_width() * k).ceil() / s, flow.flow());
     [x, rect[1] + n.inset[1] * k]
 }
 
@@ -36,6 +36,22 @@ fn boxes(layout: &Layout<Ink>, len: usize, start: u32, end: u32) -> Vec<(parley:
     crate::text::range_boxes(layout, a, b, false)
 }
 
+/// Line boxes of content bytes `start..end` of a `len`-byte drawn text in device px from its
+/// top-left: a by-paragraph field's from each paragraph they meet, moved down to it.
+fn flow_boxes(flow: TextFlow, len: usize, start: u32, end: u32) -> Vec<parley::BoundingBox> {
+    let (a, b) = ((start as usize).min(len), (end as usize).min(len));
+    let mut out = Vec::new();
+    for p in flow.pieces_over(a, b) {
+        let Some((sa, sb)) = p.clip(a, b) else { continue };
+        out.extend(crate::text::range_boxes(p.layout, sa, sb, false).into_iter().map(|(mut bb, _)| {
+            bb.y0 += p.y as f64;
+            bb.y1 += p.y as f64;
+            bb
+        }));
+    }
+    out
+}
+
 /// The link paints to draw this frame, by byte range, with the resting span's `bg_pad`.
 pub(super) struct LinkFx(Vec<(u32, u32, LinkPaint, f32, bool)>);
 
@@ -46,9 +62,13 @@ impl LinkFx {
         self.0.iter().find(|(a, b, p, _, _)| byte >= *a && byte < *b && p.color.is_some()).and_then(|(_, _, p, _, _)| p.color)
     }
 
-    /// Backgrounds and underlines (device px, layout top-left at `origin`).
-    pub(super) fn decos(&self, layout: &Layout<Ink>, len: usize, s: f32, origin: [f32; 2], out: &mut Vec<PaintedDeco>) {
+    /// Backgrounds and underlines (device px, `piece`'s top-left at `origin`), `len` its shaped
+    /// text's length.
+    pub(super) fn decos(&self, piece: crate::text::Piece, len: usize, s: f32, origin: [f32; 2], out: &mut Vec<PaintedDeco>) {
+        let layout = piece.layout;
         for &(a, b, p, bg_pad, has_rings) in &self.0 {
+            let Some((a, b)) = piece.clip(a as usize, b as usize) else { continue };
+            let (a, b) = (a as u32, b as u32);
             for (bb, line) in boxes(layout, len, a, b) {
                 let (x0, w) = (origin[0] + bb.x0 as f32, (bb.x1 - bb.x0) as f32);
                 if p.bg.is_some() || p.ring.is_some() {
@@ -133,15 +153,15 @@ impl<S: 'static> Runtime<S> {
     /// Node `i`'s link line boxes in window points (x0, y0, x1, y1) for border box `rect`.
     pub(super) fn link_boxes(&self, i: usize, rect: [f32; 4]) -> Vec<(usize, [f32; 4])> {
         let n = &self.nodes[i];
-        let (Some(spec), Some(layout)) = (&n.text, n.text_layout.as_ref().and_then(TextLayout::single)) else { return Vec::new() };
+        let (Some(spec), Some(flow)) = (&n.text, n.text_layout.as_ref().map(TextLayout::view)) else { return Vec::new() };
         let s = self.env.scale;
         let z = self.drawn_scale.get(i).copied().unwrap_or(1.0);
-        let [ox, oy] = origin(n, spec, layout, rect, s, z);
+        let [ox, oy] = origin(n, spec, flow, rect, s, z);
         let px = s / z.max(1e-4);
         let mut out = Vec::new();
         for (k, l) in spec.cold.links.iter().enumerate() {
             let (a, b) = drawn(n, l.start, l.end);
-            for (bb, _) in boxes(layout, layout_len(n, spec), a, b) {
+            for bb in flow_boxes(flow, layout_len(n, spec), a, b) {
                 out.push((k, [ox + bb.x0 as f32 / px, oy + bb.y0 as f32 / px, ox + bb.x1 as f32 / px, oy + bb.y1 as f32 / px]));
             }
         }
@@ -368,16 +388,16 @@ impl<S: 'static> Runtime<S> {
 
     pub(super) fn highlight_boxes_in(&self, nodes: &[Node], i: usize, rect: [f32; 4], z: f32) -> Vec<(usize, [f32; 4])> {
         let n = &nodes[i];
-        let (Some(spec), Some(layout)) = (&n.text, n.text_layout.as_ref().and_then(TextLayout::single)) else { return Vec::new() };
+        let (Some(spec), Some(flow)) = (&n.text, n.text_layout.as_ref().map(TextLayout::view)) else { return Vec::new() };
         if spec.cold.highlights.is_empty() { return Vec::new(); }
         let s = self.env.scale;
-        let [ox, oy] = origin(n, spec, layout, rect, s, z);
+        let [ox, oy] = origin(n, spec, flow, rect, s, z);
         let px = s / z.max(1e-4);
         let len = layout_len(n, spec);
         let mut out = Vec::new();
         for (k, h) in spec.cold.highlights.iter().enumerate() {
             let (a, b) = drawn(n, h.start, h.end);
-            for (bb, _) in boxes(layout, len, a, b) {
+            for bb in flow_boxes(flow, len, a, b) {
                 out.push((k, [ox + bb.x0 as f32 / px, oy + bb.y0 as f32 / px, ox + bb.x1 as f32 / px, oy + bb.y1 as f32 / px]));
             }
         }
