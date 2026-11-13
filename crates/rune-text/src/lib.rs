@@ -77,6 +77,7 @@ pub use fonts::families::resolved_family_of;
 #[doc(hidden)]
 pub use fonts::full_faces;
 pub use fonts::language::set_language;
+pub use fonts::script_fonts::set_script_fonts;
 #[doc(hidden)]
 pub use icon::Facing;
 pub use icon::Icon;
@@ -315,6 +316,8 @@ pub struct TextSystem {
     slot_system_mono: [bool; 2],
     /// Bit `i` is set once `fallback::SCRIPT_FONTS[i]` has been looked up.
     scripts: u64,
+    /// The app's own fonts for scripts, ahead of the system's (`set_script_fonts`).
+    script_fonts: fonts::script_fonts::ScriptMap,
     font_files: LoadedFiles,
     /// The system fonts looked up so far, and the app's own (`load_fallbacks`).
     fallbacks: system_fonts::Fallbacks,
@@ -470,6 +473,7 @@ impl TextSystem {
             system_mono: None,
             slot_system_mono: [false; 2],
             scripts: 0,
+            script_fonts: Default::default(),
             font_files: LoadedFiles::new(),
             fallbacks: system_fonts::Fallbacks::default(),
             system_faces: Default::default(),

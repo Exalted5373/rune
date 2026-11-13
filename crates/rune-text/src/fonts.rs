@@ -12,6 +12,7 @@ pub(crate) mod hidden_axes;
 pub(crate) mod language;
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod platform_face;
+pub(crate) mod script_fonts;
 #[doc(hidden)]
 pub mod system_fonts;
 pub(crate) mod system_weight;

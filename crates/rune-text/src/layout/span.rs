@@ -22,6 +22,12 @@ pub struct Span {
     pub underline: Option<Color>,
     /// The family's italic face, or a synthetic oblique when it has none.
     pub italic: bool,
+    /// The family the span's runs shape in, in place of the element's (and of the one `mono`
+    /// picks). Text it doesn't cover falls back as the element's own family's would.
+    pub family: Option<Family>,
+    /// OpenType features for the span's runs: a CSS `font-feature-settings` list (`"ss01"`,
+    /// `"'smcp' 1, 'onum'"`) on top of the element's, so a tag here wins over the same tag there.
+    pub features: &'static str,
 }
 
 impl Span {
@@ -60,6 +66,18 @@ impl Span {
         self
     }
 
+    /// Shapes the span's runs in `family`, in place of the element's.
+    pub fn family(mut self, family: Family) -> Span {
+        self.family = Some(family);
+        self
+    }
+
+    /// Adds OpenType `features` (a CSS `font-feature-settings` list) to the span's runs.
+    pub fn features(mut self, features: &'static str) -> Span {
+        self.features = features;
+        self
+    }
+
     /// Whether this span changes shaping, line metrics or painted decorations (`decorations.rs`),
     /// rather than glyph ink alone.
     pub(crate) fn affects_layout(&self) -> bool {
@@ -69,6 +87,8 @@ impl Span {
             || self.italic
             || self.bg.is_some()
             || self.underline.is_some()
+            || self.family.is_some()
+            || !self.features.is_empty()
     }
 
     /// What [`Self::affects_layout`] depends on, hashed into a layout's key.
@@ -84,6 +104,8 @@ impl Span {
             self.bg.is_some(),
             self.bg.map(|_| self.bg_pad.to_bits()),
             self.underline.is_some(),
+            self.family,
+            self.features,
         )
             .hash(h);
     }
@@ -244,6 +266,12 @@ pub fn flatten_spans(spans: &[Span]) -> Vec<Span> {
                 m.underline = s.underline;
             }
             m.italic |= s.italic;
+            if s.family.is_some() {
+                m.family = s.family;
+            }
+            if !s.features.is_empty() {
+                m.features = s.features;
+            }
         }
         if let Some(m) = merged {
             if let Some(last) = out.last_mut()
@@ -256,6 +284,8 @@ pub fn flatten_spans(spans: &[Span]) -> Vec<Span> {
                 && last.bg_pad == m.bg_pad
                 && last.underline == m.underline
                 && last.italic == m.italic
+                && last.family == m.family
+                && last.features == m.features
             {
                 last.end = m.end;
             } else {
@@ -468,3 +498,7 @@ impl TextHighlight {
         self
     }
 }
+
+#[cfg(test)]
+#[path = "span_tests.rs"]
+mod tests;
