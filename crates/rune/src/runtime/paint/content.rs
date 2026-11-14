@@ -112,8 +112,10 @@ impl<S: 'static> Runtime<S> {
             let snap_u = if cover.is_none() { (1.0 - (sc - 1.0).abs() * 32.0).clamp(0.0, 1.0) } else { 0.0 };
             let (rect, crop) = crate::pixels::fit_in(n.vis.pixels_fit, n.vis.surface_place, [r[0], r[1], w, h], pixels.size(), snap_u);
             let span = [crop[2] - crop[0], crop[3] - crop[1]];
-            // The mip covers the whole image's drawn size, not just its visible window.
-            let placed = self.images.place_at(pixels, [rect[2] / span[0], rect[3] / span[1]], Some(now));
+            // The mip covers the whole image's drawn size, not just its visible window. Under
+            // reduced motion an animation holds its first frame, as loops hold their pose.
+            let clock = (!self.reduced_motion).then_some(now);
+            let placed = self.images.place_at(pixels, [rect[2] / span[0], rect[3] / span[1]], clock);
             // An animated image wakes the window for its next frame only while drawn in a shown
             // window: off screen it isn't painted, so it asks for nothing.
             if let Some((_, Some(at))) = placed && self.live.visible() && self.time_scale > 0.0 {

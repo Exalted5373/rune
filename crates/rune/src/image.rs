@@ -704,6 +704,9 @@ use mips::byte;
 pub(crate) use from_url::font_file;
 
 #[cfg(test)]
+mod animated_tests;
+
+#[cfg(test)]
 mod mip_tests;
 
 #[cfg(test)]

@@ -1,0 +1,1 @@
+- **Animated images hold their first frame under reduced motion.** A GIF, WebP or APNG from `ImageCache` drawn while reduced motion is on (the system preference, or `Cx::reduced_motion`, which kit loops such as `Spinner` hold their pose by) shows its first frame and wakes the window for no further frames; with motion back on it plays again.
