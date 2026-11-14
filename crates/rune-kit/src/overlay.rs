@@ -74,7 +74,11 @@ fn anchor_with(motion: Spring, content: El, anchor: &str, placement: Placement, 
 
 /// A transparent full-window press target under an open overlay: pressing outside closes it.
 pub fn scrim<S: 'static>(key: impl Into<String>, close: impl Fn(&mut S) + 'static) -> El {
-    el().key(key).role("none").absolute(0.0, 0.0).w_full().h_full().on_press(close)
+    scrim_target(key).on_press(close)
+}
+
+fn scrim_target(key: impl Into<String>) -> El {
+    el().key(key).role("none").absolute(0.0, 0.0).w_full().h_full()
 }
 
 /// `Popover::new("share").trigger(button).title("Share").open(s.open).build(&kit, &mut layer)`.
@@ -156,6 +160,14 @@ impl Popover {
     pub fn on_close<S: 'static>(mut self, f: impl Fn(&mut S) + Clone + 'static) -> Self {
         self.dismiss = Some(scrim(format!("{}-scrim", self.key), f.clone()));
         self.close.press(f);
+        self
+    }
+    /// [`Self::on_close`] whose close gets the change's [`Tx`](rune::Tx), as
+    /// [`El::modal_tx`](rune::El::modal_tx) does: a popover that closes at once
+    /// (`tx.instant()`), or an app that dispatches with the press.
+    pub fn on_close_tx<S: 'static>(mut self, f: impl Fn(&mut S, &mut rune::Tx) + Clone + 'static) -> Self {
+        self.dismiss = Some(scrim_target(format!("{}-scrim", self.key)).on_press_tx(f.clone()));
+        self.close.press_tx(f);
         self
     }
 
