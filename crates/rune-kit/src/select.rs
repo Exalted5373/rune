@@ -135,6 +135,13 @@ impl Select {
         self.toggle = Some(Box::new(move |e: El| e.on_press(f)));
         self
     }
+    /// [`Self::on_toggle`] whose press gets the change's [`Tx`], as
+    /// [`El::modal_tx`](rune::El::modal_tx) does: an app that dispatches with the press, or
+    /// opens at once (`tx.instant()`).
+    pub fn on_toggle_tx<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.toggle = Some(Box::new(move |e: El| e.on_press_tx(f)));
+        self
+    }
     /// Presses outside and Escape close the listbox. While open it holds keyboard focus.
     pub fn on_close<S: 'static>(mut self, f: impl Fn(&mut S) + 'static) -> Self {
         self.dismiss = Some(dismissal(format!("{}-scrim", self.key), f));
