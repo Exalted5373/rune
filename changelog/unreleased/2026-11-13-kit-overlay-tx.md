@@ -1,0 +1,1 @@
+- **`Popover::on_close_tx` and `Select::on_toggle_tx` get the change's `Tx`**, as `El::modal_tx` does for a modal, so an app can dispatch with the press, or land the close or open at once with `tx.instant()`. `Popover::on_close` and `Select::on_toggle` are unchanged.
