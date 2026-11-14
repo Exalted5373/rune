@@ -98,5 +98,8 @@ required-features = ["markdown"]
 name = "mermaid"
 required-features = ["markdown", "mermaid"]
 
+[[test]]
+name = "tx_callbacks"
+
 [lints]
 workspace = true
