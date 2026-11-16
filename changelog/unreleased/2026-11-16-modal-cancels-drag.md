@@ -1,0 +1,1 @@
+- **A modal opening mid-drag ends the drag cancelled.** A held `on_drag` (a slider's thumb, a scroll bar's) hears `Phase::Up` with `Drag::cancelled` as the modal takes the press, as `on_drag` promises and touch already does, instead of losing the press with no release and staying drawn as held.

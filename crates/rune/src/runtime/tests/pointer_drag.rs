@@ -605,3 +605,31 @@ fn a_held_press_hears_its_drag_again_until_released() {
     assert_eq!(rt.state.len(), heard, "the release ends it");
     assert_eq!(rt.state.last().map(|e| e.0), Some(Phase::Up));
 }
+
+#[derive(Default)]
+struct OpensModal { drags: Vec<(Phase, bool)>, modal: bool }
+
+fn opens_modal_view(s: &OpensModal, _: &mut Cx<OpensModal>) -> El {
+    let root = col().size(200.0, 200.0).child(el().key("thumb").size(100.0, 40.0).on_drag(|s: &mut OpensModal, d, _| {
+        s.drags.push((d.phase, d.cancelled()));
+        if d.phase == Phase::Move { s.modal = true; }
+    }));
+    if s.modal { root.child(col().key("sheet").absolute(150.0, 150.0).size(40.0, 40.0).modal(true, |s: &mut OpensModal| s.modal = false)) } else { root }
+}
+
+/// A slider's thumb held as a modal opens hears its drag end cancelled, as `on_drag`
+/// promises for a gesture taken away, instead of staying drawn as held.
+#[test]
+fn a_modal_opening_mid_drag_ends_the_drag_cancelled() {
+    let mut rt = Runtime::new(OpensModal::default(), opens_modal_view, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.pointer_down(10.0, 10.0);
+    rt.pointer_move(40.0, 10.0);
+    rt.frame(0.0);
+    rt.frame(0.0);
+    assert!(rt.state.modal, "the drag opened the modal");
+    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, true)), "the modal took the press");
+    rt.pointer_up(40.0, 10.0);
+    rt.frame(0.0);
+    assert_eq!(rt.state.drags.iter().filter(|d| d.0 == Phase::Up).count(), 1, "the release after it does nothing");
+}
