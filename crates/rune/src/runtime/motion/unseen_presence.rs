@@ -42,13 +42,21 @@ impl<S: 'static> Runtime<S> {
     }
 
     /// Ends the exits that drew nothing last frame. A flight paints outside its clips, so it stays.
+    /// It asks the scene for its exits rather than every node whether it exits, so a frame
+    /// with none costs nothing however many nodes the window has.
     pub(super) fn end_unseen_exits(&mut self) {
         if !self.built { return; }
+        let mut exits: Vec<usize> = self.scene.exiting()
+            .filter_map(|id| self.node_index.get(&id).copied().filter(|&i| self.nodes.get(i).is_some_and(|n| n.id == id)))
+            .collect();
+        // In tree order: an exit nobody sees ends with what it holds, so a child already gone
+        // with its parent unmounts nothing more.
+        exits.sort_unstable();
         let mut hid: Option<Vec<bool>> = None;
-        for i in 0..self.nodes.len() {
+        for i in exits {
             let id = self.nodes[i].id;
             let faded = self.inh_scratch.get(i).is_some_and(|h| h.opacity < 1.0 / 512.0);
-            if (!faded && self.seen.get(i).is_none_or(|&s| s)) || !self.is_exiting(id) || self.flying.iter().any(|f| f.0 == id) {
+            if (!faded && self.seen.get(i).is_none_or(|&s| s)) || self.flying.iter().any(|f| f.0 == id) {
                 continue;
             }
             if hid.get_or_insert_with(|| self.drew_nothing()).get(i).copied().unwrap_or(false) {
@@ -186,3 +194,7 @@ impl<S: 'static> Runtime<S> {
         (0..nodes.len()).map(|i| !after[i] && olds[i].is_none_or(|o| !seen[o])).collect()
     }
 }
+
+#[cfg(test)]
+#[path = "unseen_presence_tests.rs"]
+mod tests;
