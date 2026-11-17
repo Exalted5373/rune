@@ -1,0 +1,1 @@
+- A layout read of a keyed text highlight lays out the highlights its key names, not every highlight of the text, so a long text with a mark per word stays fast to read back.

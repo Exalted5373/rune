@@ -92,3 +92,52 @@ fn a_scoped_highlight_read_follows_scrolls_and_commits() {
 fn many_reads_follow_scrolls_and_commits() {
     reads_follow_scrolls_and_commits(12);
 }
+
+struct Marks {
+    reads: Vec<String>,
+    seen: RefCell<Vec<Option<[f32; 4]>>>,
+}
+
+/// One wrapped text with a keyed highlight per word; `both` names two of them, far apart.
+fn marks_view(s: &Marks, cx: &mut Cx<Marks>) -> El {
+    *s.seen.borrow_mut() = s.reads.iter().map(|key| cx.window_layout(key)).collect();
+    let words: Vec<String> = (0..60).map(|i| format!("word{i}")).collect();
+    let mut at = 0;
+    let mut t = text(words.join(" ")).font(TextStyle::new(14.0, 400.0).lh(20.0)).wrap();
+    for (i, word) in words.iter().enumerate() {
+        let key = if i == 3 || i == 50 { "both".to_owned() } else { format!("w{i}") };
+        t = t.text_highlight(TextHighlight::new(at..at + word.len(), Color::WHITE).key(key));
+        at += word.len() + 1;
+    }
+    col().w(220.0).child(t)
+}
+
+/// A read of one key among many highlights of a text answers that key's highlights alone,
+/// the union of both when two share it; otherwise a caret or menu anchored to one word lands
+/// on the text's first mark or on the whole paragraph.
+#[test]
+fn a_read_answers_its_own_highlights_among_many_in_one_text() {
+    let reads: Vec<String> = ["w0", "w7", "both", "w59"].map(String::from).to_vec();
+    let s = Marks { reads: reads.clone(), seen: RefCell::new(Vec::new()) };
+    let mut rt = Runtime::new(s, marks_view, (300.0, 600.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    for _ in 0..600 { if !rt.frame(1.0 / 60.0) { break; } }
+    let elements = rt.elements();
+    let mark = |key: &str| -> Vec<[f32; 4]> {
+        elements.iter().filter(|e| e.key.as_deref() == Some(key)).map(|e| e.rect).collect()
+    };
+    let seen = rt.state.seen.borrow().clone();
+    for (key, seen) in reads.iter().zip(seen) {
+        let seen = seen.unwrap_or_else(|| panic!("{key}: read saw nothing"));
+        let rects = mark(key);
+        assert!(!rects.is_empty(), "{key}: drawn as a mark");
+        let x0 = rects.iter().map(|r| r[0]).fold(f32::INFINITY, f32::min);
+        let y0 = rects.iter().map(|r| r[1]).fold(f32::INFINITY, f32::min);
+        let x1 = rects.iter().map(|r| r[0] + r[2]).fold(f32::NEG_INFINITY, f32::max);
+        let y1 = rects.iter().map(|r| r[1] + r[3]).fold(f32::NEG_INFINITY, f32::max);
+        assert!(close(seen, [x0, y0, x1 - x0, y1 - y0]), "{key}: read {seen:?}, marks at {rects:?}");
+    }
+    let both = mark("both");
+    assert_eq!(both.len(), 2, "two highlights share `both`");
+    assert!((both[1][1] - both[0][1]).abs() > 1.0, "on different lines, so the union is not one word: {both:?}");
+}
