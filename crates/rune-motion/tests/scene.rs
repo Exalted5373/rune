@@ -549,3 +549,37 @@ fn a_node_without_a_presence_track_still_fades_out() {
     }
     assert!(gone);
 }
+
+#[test]
+fn exiting_lists_the_nodes_on_their_way_out_and_no_others() {
+    let (list, row, dot, kept) = (NodeId(1), NodeId(2), NodeId(3), NodeId(4));
+    let mut s = Scene::new();
+    s.insert(list, spec(0.0, 0.0, 100.0, 80.0), Mount::Initial);
+    for id in [row, kept] {
+        s.insert(id, spec(0.0, 0.0, 100.0, 40.0).parent(list), Mount::Initial);
+    }
+    s.insert(dot, spec(0.0, 0.0, 8.0, 8.0).parent(row), Mount::Initial);
+    s.frame_at(0.0);
+    let exiting = |s: &Scene| {
+        let mut ids: Vec<NodeId> = s.exiting().collect();
+        ids.sort_by_key(|id| id.0);
+        ids
+    };
+    assert!(exiting(&s).is_empty(), "nothing leaves");
+    s.remove(row);
+    s.remove(kept);
+    s.frame_at(0.05);
+    assert_eq!(exiting(&s), [row, kept], "both play their exits");
+    s.insert(kept, spec(0.0, 0.0, 100.0, 40.0).parent(list), Mount::Animated);
+    assert_eq!(exiting(&s), [row], "a node that comes back mid-exit is no longer leaving");
+    s.unmount(row);
+    assert!(exiting(&s).is_empty(), "an exit unmounted goes with what it holds");
+    s.insert(NodeId(5), spec(0.0, 0.0, 100.0, 40.0).parent(list), Mount::Animated);
+    s.remove(kept);
+    assert_eq!(exiting(&s), [kept], "a node mounting in a freed slot isn't leaving");
+    let mut t = 0.05;
+    while t < 3.0 && !s.frame_at(t).exited.contains(&kept) {
+        t += 1.0 / HZ;
+    }
+    assert!(exiting(&s).is_empty(), "an exit that played out is over");
+}

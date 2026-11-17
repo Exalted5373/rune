@@ -264,8 +264,16 @@ struct Node {
 
 impl Node {
     /// Moves this node's presence one event on, and asks for what the scene should do about it.
-    fn phase_step(&mut self, event: PhaseEvent) -> phase::Acts {
-        phase::step(&mut self.presence, &mut self.generation, event)
+    /// `exiting` is the scene's count of exiting nodes, kept as this one starts or stops leaving.
+    fn phase_step(&mut self, exiting: &mut usize, event: PhaseEvent) -> phase::Acts {
+        let was = self.presence.exiting();
+        let acts = phase::step(&mut self.presence, &mut self.generation, event);
+        match (was, self.presence.exiting()) {
+            (false, true) => *exiting += 1,
+            (true, false) => *exiting -= 1,
+            _ => {}
+        }
+        acts
     }
 }
 
@@ -326,6 +334,9 @@ pub struct Scene {
     intents: Vec<(NodeId, u32, f32)>,
     /// `keep_flights`: landings leave motion already on its way to the same value.
     keep: bool,
+    /// How many live nodes are exiting, kept by `Node::phase_step` and `remove_now`, so
+    /// [`Scene::exiting`] stops looking once it has found them all.
+    exiting: usize,
 }
 
 impl Default for Scene {
@@ -354,6 +365,7 @@ impl Scene {
             trace: None,
             intents: Vec::new(),
             keep: false,
+            exiting: 0,
         }
     }
 
@@ -438,6 +450,11 @@ impl Scene {
     pub fn phase(&self, id: NodeId) -> Option<Phase> {
         let i = self.slot(id)?;
         Some(self.nodes[i].presence.public(self.nodes[i].generation))
+    }
+    /// The nodes exiting now, in slot order: none at once when nothing exits, so a caller that
+    /// acts on exits (ending those nobody sees) doesn't look up every node it has each frame.
+    pub fn exiting(&self) -> impl Iterator<Item = NodeId> + '_ {
+        self.nodes.iter().filter(|n| n.alive && n.presence.exiting()).map(|n| n.id).take(self.exiting)
     }
     /// The last presented snapshot (hit-test against what the user sees). Not tracked.
     pub fn presented(&self, id: NodeId) -> Option<Presented> {
@@ -698,7 +715,7 @@ impl Scene {
                     continue;
                 }
                 let Some(&i) = self.index.get(&node.0) else { continue };
-                let acts = self.nodes[i as usize].phase_step(PhaseEvent::Settle);
+                let acts = self.nodes[i as usize].phase_step(&mut self.exiting, PhaseEvent::Settle);
                 for act in acts {
                     if let Act::Retire = act {
                         self.to_remove.push(i);
@@ -719,7 +736,7 @@ impl Scene {
                 continue;
             }
             let Some(&[presence, ..]) = self.store.values_of(t) else { continue };
-            let acts = self.nodes[i as usize].phase_step(PhaseEvent::Faded { p: presence });
+            let acts = self.nodes[i as usize].phase_step(&mut self.exiting, PhaseEvent::Faded { p: presence });
             for act in acts {
                 if let Act::Retire = act {
                     retire.push(i);
@@ -1028,6 +1045,9 @@ impl Scene {
         self.travelling.retain(|&x| x as usize != i);
         self.store.remove_node(id);
         self.index.remove(&id.0);
+        if self.nodes[i].presence.exiting() {
+            self.exiting -= 1;
+        }
         let n = &mut self.nodes[i];
         n.alive = false;
         n.dirty = false;

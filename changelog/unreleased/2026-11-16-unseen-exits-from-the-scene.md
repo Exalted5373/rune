@@ -1,0 +1,1 @@
+- Ending the exits nobody sees asks the motion scene for its exiting nodes (`Scene::exiting`, new) instead of asking it about every node, so a frame with nothing leaving no longer looks up each node of a long list.
